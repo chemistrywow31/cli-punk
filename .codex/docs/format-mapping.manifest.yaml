@@ -1,0 +1,45 @@
+version: 1
+generated_at: "2026-05-04"
+requested_format: "direct-codex-native"
+canonical_format: "codex-native"
+target_project: "/Users/wow/wrk/side_proj/cli-punk"
+artifacts:
+  - id: root-instructions
+    source_path: "AGENTS.md"
+    target_path: "CLAUDE.md"
+    directionality: "codex-to-claude"
+    relation: "adapted-counterpart"
+    transform_mode: "manual-adaptation"
+    sidecar_required: true
+  - id: runtime-config
+    source_path: ".codex/config.toml"
+    target_path: ".claude/settings-or-docs"
+    directionality: "codex-to-claude"
+    relation: "lossy-runtime-registry"
+    transform_mode: "manual-adaptation"
+    sidecar_required: true
+  - id: runtime-agents
+    source_path: "agents/**/*.toml"
+    target_path: ".claude/agents/*.md"
+    directionality: "codex-to-claude"
+    relation: "agent-playbook-transform"
+    transform_mode: "frontmatter-and-body-conversion"
+    sidecar_required: true
+  - id: rules
+    source_path: ".codex/rules/*.md"
+    target_path: ".claude/rules/*.md"
+    directionality: "bidirectional"
+    relation: "portable-rule"
+    transform_mode: "mostly-lossless"
+    sidecar_required: false
+  - id: skills
+    source_path: ".agents/skills/*/SKILL.md"
+    target_path: ".claude/skills/*/SKILL.md"
+    directionality: "bidirectional"
+    relation: "portable-skill"
+    transform_mode: "remove-codex-runtime-terms"
+    sidecar_required: false
+lossy_cases:
+  - "Codex project-local agent registry paths do not map directly to Claude runtime settings."
+  - "Codex runtime TOML fields are not Claude agent frontmatter fields."
+  - "Claude-only hook and allowed-tools settings were not generated."
