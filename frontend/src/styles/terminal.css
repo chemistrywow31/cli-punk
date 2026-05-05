@@ -1,0 +1,76 @@
+/* ─── Terminal Tab (xterm.js) ──────────────────────────────────── */
+
+.terminal-tab {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* xterm.js container fills the tab */
+.terminal-tab .xterm {
+  height: 100%;
+}
+
+.terminal-tab .xterm-viewport {
+  background: #0a0a14 !important;
+}
+
+/* Scrollbar styling to match cyberpunk theme */
+.terminal-tab .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar-track {
+  background: #0a0a14;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #4a4a5e;
+  border-radius: 3px;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #00f0ff;
+}
+
+body[data-terminal-style="paper"] .terminal-tab .xterm-viewport,
+body[data-terminal-style="paper"] .terminal-tab .xterm-viewport::-webkit-scrollbar-track {
+  background: #fbf7e8 !important;
+}
+
+body[data-terminal-style="paper"] .terminal-tab .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #9d9584;
+}
+
+body[data-terminal-style="paper"] .terminal-tab .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #0057b8;
+}
+
+body[data-terminal-style="amber"] .terminal-tab .xterm-viewport,
+body[data-terminal-style="amber"] .terminal-tab .xterm-viewport::-webkit-scrollbar-track {
+  background: #0d0904 !important;
+}
+
+body[data-terminal-style="amber"] .terminal-tab .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #7d5a30;
+}
+
+body[data-terminal-style="amber"] .terminal-tab .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #ffb13b;
+}
+
+body[data-terminal-style="green"] .terminal-tab .xterm-viewport,
+body[data-terminal-style="green"] .terminal-tab .xterm-viewport::-webkit-scrollbar-track {
+  background: #061008 !important;
+}
+
+body[data-terminal-style="green"] .terminal-tab .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #3d7048;
+}
+
+body[data-terminal-style="green"] .terminal-tab .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #66ff88;
+}

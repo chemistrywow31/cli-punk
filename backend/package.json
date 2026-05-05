@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "postinstall": "node -e \"const{platform}=require('os');if(platform()==='darwin'){require('child_process').execSync('chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper',{stdio:'ignore'}).toString()}\" || true"
+    "test": "node --test",
+    "postinstall": "node -e \"const{platform}=require('os'),fs=require('fs'),path=require('path');if(platform()==='darwin'){for(const base of ['node_modules/node-pty/prebuilds','../node_modules/node-pty/prebuilds']){try{for(const d of fs.readdirSync(base)){if(d.startsWith('darwin-'))fs.chmodSync(path.join(base,d,'spawn-helper'),0o755)}}catch{}}}\" || true"
   },
   "dependencies": {
     "chokidar": "^3.6.0",

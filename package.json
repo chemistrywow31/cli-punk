@@ -1,0 +1,27 @@
+{
+  "name": "claude-punk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "cli"
+  ],
+  "scripts": {
+    "backend:start": "npm --workspace backend start",
+    "backend:dev": "npm --workspace backend run dev",
+    "frontend:dev": "npm --workspace frontend run dev",
+    "frontend:build": "npm --workspace frontend run build",
+    "cli": "npm --workspace cli start",
+    "tui": "npm --workspace cli start",
+    "dev:tui": "./start.sh --tui",
+    "start:all": "./start.sh",
+    "dev": "./start.sh",
+    "start": "./start.sh",
+    "test": "npm --workspaces --if-present test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

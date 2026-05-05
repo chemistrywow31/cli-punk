@@ -1,0 +1,251 @@
+/**
+ * Dialog box — HTML overlay for interacting with a session.
+ * Tabs: Terminal | Files | Claude Config
+ * Opens when a character is clicked.
+ */
+
+import wsService from '../services/websocket.js';
+import costTracker from '../services/costTracker.js';
+import TerminalTab from './TerminalTab.js';
+import FilesTab from './FilesTab.js';
+import ClaudeConfigTab from './ClaudeConfigTab.js';
+import ActivityPanel from './ActivityPanel.js';
+import { createDialogResizeHandles } from './resizeHandle.js';
+
+export default class DialogBox {
+  constructor() {
+    this.overlay = document.getElementById('dialog-overlay');
+    this.currentSessionId = null;
+    this.currentTab = null;
+    this.tabs = {};
+    this.visible = false;
+    this.onOpen = null;
+    this.onClose = null;
+    this.activityPanel = null;     // persists across tab switches for floating mode
+    this.init();
+  }
+
+  init() {
+    this.overlay.innerHTML = `
+      <div id="dialog-box" class="cyberpunk-panel">
+        <div id="dialog-header">
+          <span id="dialog-title">Session</span>
+          <span id="dialog-status" class="status-badge">active</span>
+          <span id="dialog-cost" class="cost-badge" title="Estimated session cost">$0.00</span>
+          <button id="dialog-kill" class="kill-btn" title="Terminate session">KILL</button>
+          <span id="dialog-shortcut" class="shortcut-hint">Ctrl+\`</span>
+          <button id="dialog-close" title="Close (Ctrl+\`)">&times;</button>
+        </div>
+        <div id="dialog-tabs">
+          <button class="tab active" data-tab="cli">Terminal</button>
+          <button class="tab" data-tab="files">Files</button>
+          <button class="tab" data-tab="claude">Config</button>
+          <button class="tab" data-tab="activity">Activity</button>
+        </div>
+        <div id="dialog-content"></div>
+        <div id="dialog-input">
+          <input type="text" id="prompt-input" placeholder="Enter prompt..." spellcheck="false" />
+          <button id="prompt-send">Send</button>
+        </div>
+      </div>
+    `;
+
+    // Dialog resize handles (8 edges + corners)
+    const dialogBox = this.overlay.querySelector('#dialog-box');
+    createDialogResizeHandles(dialogBox, {
+      minWidth: 400,
+      minHeight: 300,
+      maxWidth: Math.round(window.innerWidth * 0.98),
+      maxHeight: Math.round(window.innerHeight * 0.98),
+      widthKey: 'claudePunk_dialogWidth',
+      heightKey: 'claudePunk_dialogHeight',
+    });
+
+    // Close
+    this.overlay.querySelector('#dialog-close').addEventListener('click', () => this.close());
+    this.overlay.addEventListener('click', (e) => {
+      if (e.target === this.overlay) this.close();
+    });
+
+    // Kill session
+    this.overlay.querySelector('#dialog-kill').addEventListener('click', () => {
+      if (this.currentSessionId) {
+        wsService.killSession(this.currentSessionId);
+      }
+    });
+
+    // Tab switching
+    this.overlay.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
+    });
+
+    // Prompt input
+    const promptInput = this.overlay.querySelector('#prompt-input');
+    const promptSend = this.overlay.querySelector('#prompt-send');
+
+    promptSend.addEventListener('click', () => this.sendPrompt());
+    promptInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.sendPrompt();
+    });
+
+    // Listen for activity panel popout/dock events
+    document.addEventListener('activity-popout', () => {
+      // Hide the Activity tab button, switch to another tab
+      const activityTabBtn = this.overlay.querySelector('.tab[data-tab="activity"]');
+      if (activityTabBtn) activityTabBtn.classList.add('hidden');
+      if (this.currentTab === 'activity') {
+        this.switchTab('cli');
+      }
+    });
+
+    document.addEventListener('activity-dock', () => {
+      // Show the Activity tab button again
+      const activityTabBtn = this.overlay.querySelector('.tab[data-tab="activity"]');
+      if (activityTabBtn) activityTabBtn.classList.remove('hidden');
+      // Re-add the activity panel to tabs map
+      if (this.activityPanel) {
+        this.tabs.activity = this.activityPanel;
+        this.switchTab('activity');
+      }
+    });
+
+    // Listen for session state changes
+    wsService.on('session.terminated', (payload) => {
+      if (payload.sessionId === this.currentSessionId) {
+        this.close();
+      }
+      // Fully tear down the cached terminal for this session
+      TerminalTab.purge(payload.sessionId);
+      // Tear down activity panel (including floating mode)
+      if (this.activityPanel && this.activityPanel.sessionId === payload.sessionId) {
+        this.activityPanel.fullDestroy();
+        this.activityPanel = null;
+      }
+    });
+  }
+
+  open(sessionId, label, state, agentType) {
+    this.currentSessionId = sessionId;
+    this.visible = true;
+
+    // Update header
+    this.overlay.querySelector('#dialog-title').textContent = label || sessionId;
+    const statusEl = this.overlay.querySelector('#dialog-status');
+    statusEl.textContent = state || 'active';
+    statusEl.className = `status-badge ${state || 'active'}`;
+
+    // Enable/disable based on session state
+    const isActive = state !== 'terminated';
+    this.overlay.querySelector('#prompt-input').disabled = !isActive;
+    this.overlay.querySelector('#prompt-send').disabled = !isActive;
+    const killBtn = this.overlay.querySelector('#dialog-kill');
+    if (isActive) {
+      killBtn.classList.remove('hidden');
+    } else {
+      killBtn.classList.add('hidden');
+    }
+
+    // Update cost display
+    this.updateCostDisplay();
+    this.costUnsub = costTracker.onChange((changedId) => {
+      if (changedId === this.currentSessionId) this.updateCostDisplay();
+    });
+
+    // Show
+    this.overlay.classList.remove('hidden');
+    if (this.onOpen) this.onOpen();
+
+    // Detach any currently attached tabs (in case we're switching sessions)
+    this.detachTabs();
+
+    // Build tab set — reuse cached TerminalTab, fresh instances for others
+    const termTab = TerminalTab.getOrCreate(sessionId);
+    termTab.agentType = agentType || 'claude';
+
+    // Reuse or create ActivityPanel (persists for floating mode)
+    if (!this.activityPanel || this.activityPanel.sessionId !== sessionId) {
+      if (this.activityPanel) this.activityPanel.fullDestroy();
+      this.activityPanel = new ActivityPanel(sessionId);
+    }
+
+    this.tabs = {
+      cli: termTab,
+      files: new FilesTab(sessionId),
+      claude: new ClaudeConfigTab(sessionId),
+      activity: this.activityPanel,
+    };
+
+    // Restore Activity tab button visibility
+    const activityTabBtn = this.overlay.querySelector('.tab[data-tab="activity"]');
+    if (activityTabBtn) {
+      activityTabBtn.classList.toggle('hidden', this.activityPanel.mode === 'floating');
+    }
+
+    // Activate default tab
+    this.switchTab('cli');
+  }
+
+  close() {
+    this.visible = false;
+    this.overlay.classList.add('hidden');
+    this.currentSessionId = null;
+    if (this.costUnsub) { this.costUnsub(); this.costUnsub = null; }
+    // Detach tabs from DOM (TerminalTab stays alive in cache, ActivityPanel stays alive if floating)
+    this.detachTabs();
+    if (this.onClose) this.onClose();
+  }
+
+  switchTab(tabName) {
+    // Update tab buttons
+    this.overlay.querySelectorAll('.tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+
+    // Detach current tab content
+    const content = this.overlay.querySelector('#dialog-content');
+    if (this.currentTab && this.tabs[this.currentTab]) {
+      this.tabs[this.currentTab].destroy();
+    }
+    content.innerHTML = '';
+
+    // Hide prompt input bar — xterm.js handles terminal input directly
+    const inputBar = this.overlay.querySelector('#dialog-input');
+    inputBar.style.display = 'none';
+
+    // Render new tab
+    this.currentTab = tabName;
+    if (this.tabs[tabName]) {
+      this.tabs[tabName].render(content);
+    }
+  }
+
+  sendPrompt() {
+    const input = this.overlay.querySelector('#prompt-input');
+    const prompt = input.value.trim();
+    if (!prompt || !this.currentSessionId) return;
+
+    const sent = wsService.sendPrompt(this.currentSessionId, prompt);
+    if (sent) {
+      input.value = '';
+    }
+  }
+
+  updateCostDisplay() {
+    const costEl = this.overlay.querySelector('#dialog-cost');
+    if (!costEl || !this.currentSessionId) return;
+    const data = costTracker.getSessionCost(this.currentSessionId);
+    if (data) {
+      const costStr = costTracker.formatCost(data.cost);
+      const tokens = costTracker.formatTokens(data.inputTokens + data.outputTokens);
+      costEl.textContent = `${costStr} (${tokens} tokens)`;
+      costEl.title = `Input: ${costTracker.formatTokens(data.inputTokens)} | Output: ${costTracker.formatTokens(data.outputTokens)} | ${data.method}`;
+    }
+  }
+
+  /** Detach all tabs from DOM without destroying cached TerminalTabs. */
+  detachTabs() {
+    Object.values(this.tabs).forEach((tab) => tab.destroy());
+    this.tabs = {};
+    this.currentTab = null;
+  }
+}

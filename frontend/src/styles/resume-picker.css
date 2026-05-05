@@ -1,0 +1,210 @@
+/* ─── Resume Picker Overlay ────────────────────────────────────── */
+
+#resume-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+}
+
+.resume-picker-panel {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* ─── Header ──────────────────────────────────────────────────── */
+
+.rp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.rp-title {
+  font-family: var(--font-ui);
+  font-size: calc(16px + var(--fs-offset));
+  font-weight: 700;
+  color: var(--border-neon);
+  letter-spacing: 2px;
+}
+
+.rp-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.rp-close:hover {
+  color: var(--accent-pink);
+}
+
+/* ─── Body ────────────────────────────────────────────────────── */
+
+.rp-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rp-dir-section {
+  width: 200px;
+  min-width: 160px;
+  border-right: 1px solid rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rp-conv-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rp-section-label {
+  font-family: var(--font-mono);
+  font-size: calc(10px + var(--fs-offset));
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+  padding: 8px 10px 4px;
+  text-transform: uppercase;
+}
+
+.rp-dir-name {
+  color: var(--border-neon);
+  margin-left: 6px;
+}
+
+/* ─── Directory List ──────────────────────────────────────────── */
+
+.rp-dir-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.rp-dir-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: calc(12px + var(--fs-offset));
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s;
+  gap: 2px;
+}
+
+.rp-dir-item:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.05);
+}
+
+.rp-dir-item.active {
+  border-color: var(--border-neon);
+  background: rgba(0, 240, 255, 0.1);
+}
+
+.rp-dir-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.rp-dir-path {
+  color: var(--text-secondary);
+  font-size: calc(10px + var(--fs-offset));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Conversation List ───────────────────────────────────────── */
+
+.rp-conv-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+
+.rp-conv-loading,
+.rp-conv-empty,
+.rp-empty {
+  padding: 16px 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: calc(11px + var(--fs-offset));
+  text-align: center;
+}
+
+.rp-conv-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: rgba(26, 26, 46, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.1);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: calc(12px + var(--fs-offset));
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s;
+  gap: 4px;
+}
+
+.rp-conv-item:hover {
+  border-color: var(--border-neon);
+  background: rgba(0, 240, 255, 0.08);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+}
+
+.rp-conv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rp-conv-time {
+  color: var(--border-neon);
+  font-size: calc(10px + var(--fs-offset));
+  font-weight: 600;
+}
+
+.rp-conv-size {
+  color: var(--text-secondary);
+  font-size: calc(9px + var(--fs-offset));
+}
+
+.rp-conv-text {
+  color: var(--text-secondary);
+  font-size: calc(11px + var(--fs-offset));
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-all;
+}

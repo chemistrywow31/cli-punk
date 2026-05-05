@@ -18,10 +18,74 @@ import { EventEmitter } from 'node:events';
 import { execSync } from 'node:child_process';
 import http from 'node:http';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 // ─── Section 1: Config ───────────────────────────────────────────────────────
 
 const IS_WINDOWS = process.platform === 'win32';
+const BACKEND_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(BACKEND_DIR, '..');
+const AUTH_ENV_KEYS = Object.freeze([
+  'CLAUDE_PUNK_ADMIN_TOKEN',
+  'CLAUDE_PUNK_AUTH_KEY',
+  'CLAUDE_PUNK_DEV_TOKEN',
+]);
+
+function dotenvPaths() {
+  if (process.env.CLAUDE_PUNK_ENV_FILE) {
+    return [path.resolve(process.env.CLAUDE_PUNK_ENV_FILE)];
+  }
+  return [
+    path.join(BACKEND_DIR, '.env'),
+    path.join(PROJECT_ROOT, '.env'),
+  ];
+}
+
+function parseDotenvContent(content) {
+  const values = {};
+  for (const rawLine of String(content || '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    let value = rawValue.trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.replace(/\s+#.*$/, '');
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+function readDotenvFilesSync(pathsToRead = dotenvPaths()) {
+  const values = {};
+  for (const envPath of pathsToRead) {
+    try {
+      Object.assign(values, parseDotenvContent(fs.readFileSync(envPath, 'utf8')));
+    } catch (err) {
+      if (err.code !== 'ENOENT') console.warn(`[config] Could not read ${envPath}: ${err.message}`);
+    }
+  }
+  return values;
+}
+
+function loadDotenvIntoProcess() {
+  const values = readDotenvFilesSync();
+  for (const [key, value] of Object.entries(values)) {
+    if (AUTH_ENV_KEYS.includes(key)) continue;
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadDotenvIntoProcess();
+
+function resolveProjectPath(value, fallback) {
+  if (!value) return fallback;
+  return path.isAbsolute(value) ? value : path.resolve(PROJECT_ROOT, value);
+}
 
 // ── Shell detection (runs once at startup, sets flags for everything else) ───
 
@@ -124,7 +188,7 @@ const _enhancedPath = buildEnhancedPath();
 
 const CONFIG = {
   port: parseInt(process.env.PORT || '3000', 10),
-  host: '127.0.0.1',
+  host: process.env.HOST || '127.0.0.1',
   maxSessions: 16,
   fileCountRatio: 20,
   autoRunClaude: process.env.AUTO_RUN_CLAUDE !== 'false',
@@ -138,8 +202,8 @@ const CONFIG = {
   autoRunDelayMs: 300,
   enhancedPath: _enhancedPath,
   agentCommands: {
-    claude: `${resolveCommand('claude')} --dangerously-skip-permissions`,
-    codex: `${resolveCommand('codex')} --full-auto`,
+    claude: `${resolveCommand('claude')} --enable-auto-mode`,
+    codex: `${resolveCommand('codex')} --yolo`,
   },
   fileWatchDebounceMs: 500,
   fileTreeMaxDepth: 10,
@@ -159,6 +223,687 @@ function shouldExclude(name) {
   // Exclude hidden files/dirs except .claude
   if (name.startsWith('.') && name !== '.claude') return true;
   return false;
+}
+
+// ─── Security Helpers: Auth, Audit, Path Safety ─────────────────────────────
+
+const AUTH_DIR = resolveProjectPath(process.env.CLAUDE_PUNK_AUTH_DIR, path.join(os.homedir(), '.claude-punk'));
+const AUTH_FILE = path.join(AUTH_DIR, 'auth.json');
+const AUDIT_FILE = path.join(AUTH_DIR, 'audit.log');
+const ROLE_RANK = Object.freeze({ viewer: 1, operator: 2, admin: 3 });
+const VALID_ROLES = new Set(Object.keys(ROLE_RANK));
+const TOKEN_HASH_PARAMS = Object.freeze({ N: 16384, r: 8, p: 1, keyLength: 64, maxmem: 64 * 1024 * 1024 });
+const FILE_TRANSFER_MAX_BYTES = 5 * 1024 * 1024;
+const BROWSER_SESSION_COOKIE = 'claude_punk_session';
+const BROWSER_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const BROWSER_SESSION_MAX_AGE_SECONDS = Math.floor(BROWSER_SESSION_MAX_AGE_MS / 1000);
+
+class AuthError extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+    this.status = code === 'AUTH_FORBIDDEN' ? 403 : 401;
+  }
+}
+
+class PathSafetyError extends Error {
+  constructor(message = 'Path traversal not allowed') {
+    super(message);
+    this.code = 'PATH_OUTSIDE_WORKDIR';
+  }
+}
+
+function hasRole(auth, minimumRole) {
+  return ROLE_RANK[auth?.role] >= ROLE_RANK[minimumRole];
+}
+
+function sanitizeTokenRecord(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    role: record.role,
+    createdAt: record.createdAt,
+    lastUsedAt: record.lastUsedAt || null,
+    revokedAt: record.revokedAt || null,
+  };
+}
+
+function createPlainToken() {
+  return `cp_${crypto.randomBytes(32).toString('base64url')}`;
+}
+
+function createTokenId() {
+  return `tok_${crypto.randomBytes(12).toString('base64url')}`;
+}
+
+function hashToken(plainToken) {
+  const salt = crypto.randomBytes(16);
+  const key = crypto.scryptSync(plainToken, salt, TOKEN_HASH_PARAMS.keyLength, {
+    N: TOKEN_HASH_PARAMS.N,
+    r: TOKEN_HASH_PARAMS.r,
+    p: TOKEN_HASH_PARAMS.p,
+    maxmem: TOKEN_HASH_PARAMS.maxmem,
+  });
+  return [
+    'scrypt',
+    TOKEN_HASH_PARAMS.N,
+    TOKEN_HASH_PARAMS.r,
+    TOKEN_HASH_PARAMS.p,
+    salt.toString('base64url'),
+    key.toString('base64url'),
+  ].join('$');
+}
+
+function verifyTokenHash(plainToken, storedHash) {
+  const parts = storedHash.split('$');
+  if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
+  const [, nRaw, rRaw, pRaw, saltRaw, keyRaw] = parts;
+  const N = Number(nRaw);
+  const r = Number(rRaw);
+  const p = Number(pRaw);
+  if (!Number.isInteger(N) || !Number.isInteger(r) || !Number.isInteger(p)) return false;
+  const salt = Buffer.from(saltRaw, 'base64url');
+  const expected = Buffer.from(keyRaw, 'base64url');
+  if (expected.length === 0) return false;
+  const actual = crypto.scryptSync(plainToken, salt, expected.length, {
+    N,
+    r,
+    p,
+    maxmem: TOKEN_HASH_PARAMS.maxmem,
+  });
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function timingSafeStringEqual(left, right) {
+  const leftDigest = crypto.createHash('sha256').update(String(left)).digest();
+  const rightDigest = crypto.createHash('sha256').update(String(right)).digest();
+  return crypto.timingSafeEqual(leftDigest, rightDigest);
+}
+
+function tokenDigestId(prefix, plainToken) {
+  return `${prefix}_${crypto.createHash('sha256').update(String(plainToken)).digest('base64url').slice(0, 18)}`;
+}
+
+async function ensurePrivateDir(dirPath) {
+  await fs.promises.mkdir(dirPath, { recursive: true, mode: 0o700 });
+  try {
+    await fs.promises.chmod(dirPath, 0o700);
+  } catch {
+    // Windows and some filesystems do not fully support POSIX modes.
+  }
+}
+
+async function writeJsonPrivate(filePath, data) {
+  await ensurePrivateDir(path.dirname(filePath));
+  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+  try {
+    await fs.promises.chmod(tmpPath, 0o600);
+  } catch { /* ignore unsupported chmod */ }
+  await fs.promises.rename(tmpPath, filePath);
+  try {
+    await fs.promises.chmod(filePath, 0o600);
+  } catch { /* ignore unsupported chmod */ }
+}
+
+function sanitizeAuditValue(value) {
+  if (Array.isArray(value)) return value.map(sanitizeAuditValue);
+  if (!value || typeof value !== 'object') return value;
+
+  const sanitized = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    const lowered = key.toLowerCase();
+    if (lowered.includes('token') && key !== 'tokenId') continue;
+    if (['authorization', 'hash', 'content', 'data'].includes(lowered)) continue;
+    sanitized[key] = sanitizeAuditValue(entryValue);
+  }
+  return sanitized;
+}
+
+class AuditLogger {
+  constructor(filePath = AUDIT_FILE) {
+    this.filePath = filePath;
+  }
+
+  async write(event) {
+    try {
+      await ensurePrivateDir(path.dirname(this.filePath));
+      const line = JSON.stringify(sanitizeAuditValue({
+        timestamp: new Date().toISOString(),
+        ...event,
+      })) + '\n';
+      await fs.promises.appendFile(this.filePath, line, { mode: 0o600 });
+      try {
+        await fs.promises.chmod(this.filePath, 0o600);
+      } catch { /* ignore unsupported chmod */ }
+    } catch (err) {
+      console.error(`[audit] Failed to write audit event: ${err.message}`);
+    }
+  }
+}
+
+class EnvTokenProvider {
+  constructor(pathsToRead = dotenvPaths()) {
+    this.pathsToRead = pathsToRead;
+    this.signature = null;
+    this.records = [];
+  }
+
+  async reloadIfNeeded() {
+    const signature = await this.currentSignature();
+    if (signature === this.signature) return;
+    this.signature = signature;
+    const values = await this.readValues();
+    const token = this.firstToken(values);
+    this.records = token ? [this.createRecord(token)] : [];
+  }
+
+  async currentSignature() {
+    const parts = [];
+    for (const envPath of this.pathsToRead) {
+      try {
+        const stat = await fs.promises.stat(envPath);
+        parts.push(`${envPath}:${stat.mtimeMs}:${stat.size}`);
+      } catch (err) {
+        if (err.code !== 'ENOENT') parts.push(`${envPath}:error:${err.code}`);
+        else parts.push(`${envPath}:missing`);
+      }
+    }
+    for (const key of AUTH_ENV_KEYS) {
+      if (process.env[key]) {
+        parts.push(`${key}:${crypto.createHash('sha256').update(process.env[key]).digest('base64url')}`);
+      }
+    }
+    return parts.join('|');
+  }
+
+  async readValues() {
+    const values = {};
+    for (const envPath of this.pathsToRead) {
+      try {
+        Object.assign(values, parseDotenvContent(await fs.promises.readFile(envPath, 'utf8')));
+      } catch (err) {
+        if (err.code !== 'ENOENT') console.warn(`[auth] Could not read ${envPath}: ${err.message}`);
+      }
+    }
+    for (const key of AUTH_ENV_KEYS) {
+      if (process.env[key] && !values[key]) values[key] = process.env[key];
+    }
+    return values;
+  }
+
+  firstToken(values) {
+    for (const key of AUTH_ENV_KEYS) {
+      const value = String(values[key] || '').trim();
+      if (value) return value;
+    }
+    return null;
+  }
+
+  createRecord(plainToken) {
+    const now = new Date().toISOString();
+    return {
+      id: tokenDigestId('env_admin', plainToken),
+      name: 'env-admin',
+      role: 'admin',
+      createdAt: now,
+      lastUsedAt: null,
+      revokedAt: null,
+      plainToken,
+      source: 'env',
+    };
+  }
+
+  async verify(plainToken) {
+    await this.reloadIfNeeded();
+    for (const record of this.records) {
+      if (timingSafeStringEqual(plainToken, record.plainToken)) {
+        record.lastUsedAt = new Date().toISOString();
+        return sanitizeTokenRecord(record);
+      }
+    }
+    return null;
+  }
+
+  async getActiveById(id) {
+    await this.reloadIfNeeded();
+    return this.records.find((record) => record.id === id) || null;
+  }
+
+  async list() {
+    await this.reloadIfNeeded();
+    return this.records.map(sanitizeTokenRecord);
+  }
+
+  async hasToken() {
+    await this.reloadIfNeeded();
+    return this.records.length > 0;
+  }
+}
+
+class TokenStore {
+  constructor(filePath = AUTH_FILE, envTokenProvider = new EnvTokenProvider()) {
+    this.filePath = filePath;
+    this.envTokenProvider = envTokenProvider;
+    this.store = { version: 1, browserSessionSecret: null, tokens: [] };
+    this._saveQueue = Promise.resolve();
+  }
+
+  async init(auditLogger = null) {
+    await ensurePrivateDir(path.dirname(this.filePath));
+    await this.load();
+    if (this.store.tokens.length === 0 && !(await this.envTokenProvider.hasToken())) {
+      const created = await this.createToken({ name: 'initial-admin', role: 'admin' });
+      await auditLogger?.write({
+        operation: 'token.create',
+        actor: { type: 'system' },
+        target: { tokenId: created.record.id, name: created.record.name, role: created.record.role },
+        outcome: 'success',
+      });
+      console.log('[auth] Created initial admin token. Plaintext is shown once:');
+      console.log(`[auth] Initial admin token: ${created.token}`);
+    }
+  }
+
+  async load() {
+    try {
+      const raw = await fs.promises.readFile(this.filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      this.store = this.normalizeStore(parsed);
+      if (!this.store.browserSessionSecret) {
+        this.store.browserSessionSecret = crypto.randomBytes(32).toString('base64url');
+        await this.save();
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      this.store = this.normalizeStore();
+      this.store.browserSessionSecret = crypto.randomBytes(32).toString('base64url');
+      await this.save();
+    }
+  }
+
+  normalizeStore(parsed = {}) {
+    return {
+      version: 1,
+      browserSessionSecret: typeof parsed.browserSessionSecret === 'string'
+        ? parsed.browserSessionSecret
+        : null,
+      tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
+    };
+  }
+
+  async save() {
+    const write = () => writeJsonPrivate(this.filePath, this.store);
+    this._saveQueue = this._saveQueue.then(write, write);
+    await this._saveQueue;
+  }
+
+  async createToken({ name, role }) {
+    const normalizedRole = role || 'operator';
+    if (!VALID_ROLES.has(normalizedRole)) {
+      const err = new Error(`Invalid role: ${normalizedRole}`);
+      err.code = 'INVALID_ROLE';
+      throw err;
+    }
+    const now = new Date().toISOString();
+    const token = createPlainToken();
+    const record = {
+      id: createTokenId(),
+      name: String(name || normalizedRole).slice(0, 120),
+      hash: hashToken(token),
+      role: normalizedRole,
+      createdAt: now,
+      lastUsedAt: null,
+      revokedAt: null,
+    };
+    this.store.tokens.push(record);
+    await this.save();
+    return { token, record: sanitizeTokenRecord(record) };
+  }
+
+  async verify(plainToken) {
+    if (!plainToken) return null;
+    const envIdentity = await this.envTokenProvider.verify(plainToken);
+    if (envIdentity) return envIdentity;
+
+    for (const record of this.store.tokens) {
+      if (record.revokedAt) continue;
+      let matched = false;
+      try {
+        matched = verifyTokenHash(plainToken, record.hash);
+      } catch {
+        matched = false;
+      }
+      if (matched) {
+        record.lastUsedAt = new Date().toISOString();
+        await this.save();
+        return sanitizeTokenRecord(record);
+      }
+    }
+    return null;
+  }
+
+  async getActiveById(id) {
+    const envRecord = await this.envTokenProvider.getActiveById(id);
+    if (envRecord) return envRecord;
+    return this.store.tokens.find((record) => record.id === id && !record.revokedAt) || null;
+  }
+
+  async createBrowserSession(auth) {
+    const record = await this.getActiveById(auth?.id);
+    if (!record) return null;
+    const now = Date.now();
+    const payload = {
+      v: 1,
+      tokenId: record.id,
+      role: record.role,
+      iat: now,
+      exp: now + BROWSER_SESSION_MAX_AGE_MS,
+    };
+    return this.signBrowserSession(payload);
+  }
+
+  signBrowserSession(payload) {
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', this.store.browserSessionSecret)
+      .update(encodedPayload)
+      .digest('base64url');
+    return `${encodedPayload}.${signature}`;
+  }
+
+  async verifyBrowserSession(sessionValue) {
+    if (!sessionValue || !this.store.browserSessionSecret) return null;
+    try {
+      const [encodedPayload, signature, extra] = String(sessionValue).split('.');
+      if (!encodedPayload || !signature || extra !== undefined) return null;
+      const expected = crypto
+        .createHmac('sha256', this.store.browserSessionSecret)
+        .update(encodedPayload)
+        .digest();
+      const actual = Buffer.from(signature, 'base64url');
+      if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+
+      const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+      if (payload?.v !== 1 || typeof payload.tokenId !== 'string' || typeof payload.exp !== 'number') {
+        return null;
+      }
+      if (payload.exp < Date.now()) return null;
+
+      const record = await this.getActiveById(payload.tokenId);
+      if (!record || record.role !== payload.role) return null;
+      if (record.source !== 'env') {
+        record.lastUsedAt = new Date().toISOString();
+        await this.save();
+      }
+      return sanitizeTokenRecord(record);
+    } catch {
+      return null;
+    }
+  }
+
+  async list() {
+    return [
+      ...(await this.envTokenProvider.list()),
+      ...this.store.tokens.map(sanitizeTokenRecord),
+    ];
+  }
+
+  async revoke(id) {
+    const record = this.store.tokens.find((token) => token.id === id);
+    if (!record || record.revokedAt) return null;
+    record.revokedAt = new Date().toISOString();
+    await this.save();
+    return sanitizeTokenRecord(record);
+  }
+}
+
+function parseBearerToken(req, { allowQueryToken = false } = {}) {
+  const value = req.headers?.authorization || '';
+  const match = /^Bearer\s+(.+)$/i.exec(value);
+  if (match?.[1]) return match[1].trim();
+
+  if (allowQueryToken) {
+    try {
+      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      const token = url.searchParams.get('token');
+      if (token) return token;
+    } catch {
+      // Treat malformed URLs as missing auth.
+    }
+  }
+
+  return null;
+}
+
+function parseCookies(cookieHeader) {
+  const cookies = new Map();
+  for (const part of String(cookieHeader || '').split(';')) {
+    const index = part.indexOf('=');
+    if (index <= 0) continue;
+    const name = part.slice(0, index).trim();
+    const rawValue = part.slice(index + 1).trim();
+    if (!name) continue;
+    try {
+      cookies.set(name, decodeURIComponent(rawValue));
+    } catch {
+      cookies.set(name, rawValue);
+    }
+  }
+  return cookies;
+}
+
+function parseBrowserSessionCookie(req) {
+  return parseCookies(req.headers?.cookie).get(BROWSER_SESSION_COOKIE) || null;
+}
+
+function normalizeHost(value) {
+  return String(value || '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/^::ffff:/, '');
+}
+
+function isLocalhost(value) {
+  const host = normalizeHost(value);
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function requestHostName(req) {
+  try {
+    return new URL(`http://${req.headers.host || ''}`).hostname;
+  } catch {
+    return req.headers.host || '';
+  }
+}
+
+function allowsLocalhostQueryToken(req) {
+  return isLocalhost(CONFIG.host) && isLocalhost(req.socket?.remoteAddress) && isLocalhost(requestHostName(req));
+}
+
+function configuredAllowedOrigins() {
+  return new Set(String(process.env.CLAUDE_PUNK_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean));
+}
+
+const ALLOWED_ORIGINS = configuredAllowedOrigins();
+
+function originHostMatchesRequest(req, originUrl) {
+  const requestHost = String(req.headers.host || '').trim().toLowerCase();
+  return Boolean(requestHost) && originUrl.host.toLowerCase() === requestHost;
+}
+
+function isAllowedOrigin(origin, req = null) {
+  if (!origin) return true;
+  try {
+    const originUrl = new URL(origin);
+    if (isLocalhost(originUrl.hostname)) return true;
+    if (ALLOWED_ORIGINS.has(originUrl.origin)) return true;
+    if (req && originHostMatchesRequest(req, originUrl)) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function isAllowedRequestOrigin(req) {
+  return isAllowedOrigin(req.headers.origin, req);
+}
+
+function isBrowserSessionRequest(req) {
+  return Boolean(parseBrowserSessionCookie(req));
+}
+
+function rejectDisallowedBrowserOrigin(req, res, next) {
+  if (req.headers.origin && isBrowserSessionRequest(req) && !isAllowedRequestOrigin(req)) {
+    return res.status(403).json({ error: 'AUTH_FORBIDDEN' });
+  }
+  next();
+}
+
+function isSecureRequest(req) {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return Boolean(req.secure || forwardedProto === 'https');
+}
+
+function browserCookieSameSite(req) {
+  const requested = String(process.env.CLAUDE_PUNK_COOKIE_SAMESITE || 'lax').trim().toLowerCase();
+  const normalized = requested === 'strict' ? 'Strict'
+    : requested === 'none' ? 'None'
+    : 'Lax';
+  return normalized === 'None' && !isSecureRequest(req) ? 'Lax' : normalized;
+}
+
+function buildBrowserSessionCookie(req, value, maxAgeSeconds) {
+  const parts = [
+    `${BROWSER_SESSION_COOKIE}=${encodeURIComponent(value)}`,
+    'HttpOnly',
+    'Path=/',
+    `Max-Age=${maxAgeSeconds}`,
+    `SameSite=${browserCookieSameSite(req)}`,
+  ];
+  if (maxAgeSeconds <= 0) parts.push('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+  if (isSecureRequest(req)) parts.push('Secure');
+  return parts.join('; ');
+}
+
+function setBrowserSessionCookie(req, res, value) {
+  res.setHeader('Set-Cookie', buildBrowserSessionCookie(req, value, BROWSER_SESSION_MAX_AGE_SECONDS));
+}
+
+function clearBrowserSessionCookie(req, res) {
+  res.setHeader('Set-Cookie', buildBrowserSessionCookie(req, '', 0));
+}
+
+async function authenticateRequest(req, tokenStore, options = {}) {
+  const plainToken = parseBearerToken(req, options);
+  if (plainToken) {
+    const identity = await tokenStore.verify(plainToken);
+    if (!identity) throw new AuthError('AUTH_INVALID');
+    return identity;
+  }
+
+  const browserSession = parseBrowserSessionCookie(req);
+  if (browserSession) {
+    const identity = await tokenStore.verifyBrowserSession(browserSession);
+    if (!identity) throw new AuthError('AUTH_INVALID');
+    return identity;
+  }
+
+  throw new AuthError('AUTH_REQUIRED');
+}
+
+function requireAuth(tokenStore) {
+  return async (req, res, next) => {
+    try {
+      req.auth = await authenticateRequest(req, tokenStore);
+      next();
+    } catch (err) {
+      const code = err instanceof AuthError ? err.code : 'AUTH_INVALID';
+      const status = err instanceof AuthError ? err.status : 401;
+      res.status(status).json({ error: code });
+    }
+  };
+}
+
+function requireMinimumRole(minimumRole) {
+  return (req, res, next) => {
+    if (!hasRole(req.auth, minimumRole)) {
+      return res.status(403).json({ error: 'AUTH_FORBIDDEN' });
+    }
+    next();
+  };
+}
+
+function auditActor(auth) {
+  if (!auth) return { type: 'unknown' };
+  return { tokenId: auth.id, role: auth.role };
+}
+
+function isInsidePath(rootDir, targetPath) {
+  const relative = path.relative(rootDir, targetPath);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+function assertInsidePath(rootDir, targetPath) {
+  if (!isInsidePath(rootDir, targetPath)) {
+    throw new PathSafetyError();
+  }
+}
+
+async function resolveExistingInside(rootDir, targetPath) {
+  const root = await fs.promises.realpath(rootDir);
+  const requestedPath = path.resolve(root, targetPath);
+  assertInsidePath(root, requestedPath);
+  const realPath = await fs.promises.realpath(requestedPath);
+  assertInsidePath(root, realPath);
+  return { root, requestedPath, realPath };
+}
+
+async function resolveNewInside(rootDir, targetPath) {
+  const root = await fs.promises.realpath(rootDir);
+  const requestedPath = path.resolve(root, targetPath);
+  assertInsidePath(root, requestedPath);
+
+  const targetParent = path.dirname(requestedPath);
+  const targetName = path.basename(requestedPath);
+  const missingParentParts = [];
+  let cursor = targetParent;
+  let realParent = null;
+
+  while (true) {
+    try {
+      realParent = await fs.promises.realpath(cursor);
+      break;
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      const next = path.dirname(cursor);
+      if (next === cursor) throw new PathSafetyError();
+      missingParentParts.push(path.basename(cursor));
+      cursor = next;
+    }
+  }
+
+  assertInsidePath(root, realParent);
+  const finalPath = path.join(realParent, ...missingParentParts.reverse(), targetName);
+  assertInsidePath(root, finalPath);
+  return { root, requestedPath, realPath: finalPath };
+}
+
+async function resolveWritableInside(rootDir, targetPath) {
+  const root = await fs.promises.realpath(rootDir);
+  const requestedPath = path.resolve(root, targetPath);
+  try {
+    const realPath = await fs.promises.realpath(requestedPath);
+    assertInsidePath(root, realPath);
+    return { root, requestedPath, realPath };
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+    return resolveNewInside(root, targetPath);
+  }
+}
+
+function sendPathError(sendToClient, ws) {
+  sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
 }
 
 // ─── Claude Activity Helpers ────────────────────────────────────────────────
@@ -461,6 +1206,7 @@ class SessionManager extends EventEmitter {
       console.error(`[session] workDir is not a directory: "${workDir}"`);
       throw new Error(`workDir is not a directory: ${workDir}`);
     }
+    workDir = fs.realpathSync(workDir);
     if (this.sessions.size >= CONFIG.maxSessions) {
       throw new Error(`Maximum sessions (${CONFIG.maxSessions}) reached`);
     }
@@ -1306,12 +2052,21 @@ class ClaudeActivityWatcher extends EventEmitter {
 
 // ─── Section 6: buildFileTree ────────────────────────────────────────────────
 
-async function buildFileTree(dir, currentDepth = 0, baseDir = null) {
+async function buildFileTree(dir, currentDepth = 0, baseDir = null, rootReal = null) {
   if (baseDir === null) baseDir = dir;
+  if (rootReal === null) {
+    try {
+      rootReal = await fs.promises.realpath(baseDir);
+    } catch {
+      return [];
+    }
+  }
   if (currentDepth >= CONFIG.fileTreeMaxDepth) return [];
 
   let entries;
   try {
+    const dirReal = await fs.promises.realpath(dir);
+    assertInsidePath(rootReal, dirReal);
     entries = await fs.promises.readdir(dir, { withFileTypes: true });
   } catch {
     return [];
@@ -1335,13 +2090,15 @@ async function buildFileTree(dir, currentDepth = 0, baseDir = null) {
     // Resolve symlinks via stat (follows links) to get real type
     let realStat;
     try {
+      const realPath = await fs.promises.realpath(fullPath);
+      assertInsidePath(rootReal, realPath);
       realStat = await fs.promises.stat(fullPath);
     } catch {
-      continue; // skip broken symlinks or inaccessible entries
+      continue; // skip broken, escaping, or inaccessible entries
     }
 
     if (realStat.isDirectory()) {
-      const children = await buildFileTree(fullPath, currentDepth + 1, baseDir);
+      const children = await buildFileTree(fullPath, currentDepth + 1, baseDir, rootReal);
       nodes.push({
         name: entry.name,
         path: relPath,
@@ -1396,8 +2153,28 @@ async function readClaudeConfig(workDir) {
 
 // ─── Section 8: WebSocket Server ─────────────────────────────────────────────
 
-function createWSS(server, sessionManager, fileWatcher) {
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024 * 1024 });
+function createWSS(server, sessionManager, fileWatcher, tokenStore, auditLogger) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 });
+
+  const messageRoles = {
+    'session.create': 'operator',
+    'session.prompt': 'operator',
+    'terminal.input': 'operator',
+    'terminal.resize': 'operator',
+    'session.kill': 'operator',
+    'fs.browse': 'viewer',
+    'files.requestTree': 'viewer',
+    'file.read': 'viewer',
+    'file.write': 'operator',
+    'file.create': 'operator',
+    'file.delete': 'operator',
+    'file.upload': 'operator',
+    'file.download': 'viewer',
+    'claude.requestConfig': 'viewer',
+    'claude.listConversations': 'viewer',
+    'claude.watchActivity': 'viewer',
+    'claude.unwatchActivity': 'viewer',
+  };
 
   // --- Helpers ---
 
@@ -1414,6 +2191,53 @@ function createWSS(server, sessionManager, fileWatcher) {
       }
     }
   }
+
+  function rejectUpgrade(socket, code, status = 401) {
+    const body = JSON.stringify({ error: code });
+    const reason = status === 403 ? 'Forbidden' : 'Unauthorized';
+    socket.write([
+      `HTTP/1.1 ${status} ${reason}`,
+      'Connection: close',
+      'Content-Type: application/json',
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      '',
+      body,
+    ].join('\r\n'));
+    socket.destroy();
+  }
+
+  server.on('upgrade', async (req, socket, head) => {
+    let pathname = '';
+    try {
+      pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+
+    if (pathname !== '/ws') {
+      socket.destroy();
+      return;
+    }
+
+    if (req.headers.origin && !isAllowedRequestOrigin(req)) {
+      rejectUpgrade(socket, 'AUTH_FORBIDDEN', 403);
+      return;
+    }
+
+    try {
+      const auth = await authenticateRequest(req, tokenStore, {
+        allowQueryToken: allowsLocalhostQueryToken(req),
+      });
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.auth = auth;
+        wss.emit('connection', ws, req);
+      });
+    } catch (err) {
+      const code = err instanceof AuthError ? err.code : 'AUTH_INVALID';
+      rejectUpgrade(socket, code);
+    }
+  });
 
   // --- Heartbeat ---
 
@@ -1504,6 +2328,12 @@ function createWSS(server, sessionManager, fileWatcher) {
         return;
       }
 
+      const minimumRole = messageRoles[msg.type];
+      if (minimumRole && !hasRole(ws.auth, minimumRole)) {
+        sendToClient(ws, 'error', { message: 'Forbidden', code: 'AUTH_FORBIDDEN' });
+        return;
+      }
+
       try {
         switch (msg.type) {
           case 'session.create': {
@@ -1514,8 +2344,14 @@ function createWSS(server, sessionManager, fileWatcher) {
             }
             const session = sessionManager.create(workDir, label, agentType, resume);
             broadcast('session.update', session);
-            fileWatcher.watch(session.id, workDir);
-            activityWatcher.watch(session.id, workDir);
+            fileWatcher.watch(session.id, session.workDir);
+            activityWatcher.watch(session.id, session.workDir);
+            await auditLogger.write({
+              operation: 'session.create',
+              actor: auditActor(ws.auth),
+              target: { sessionId: session.id, workDir: session.workDir, agentType: session.agentType },
+              outcome: 'success',
+            });
             break;
           }
 
@@ -1558,6 +2394,12 @@ function createWSS(server, sessionManager, fileWatcher) {
             sessionManager.kill(sessionId);
             fileWatcher.unwatch(sessionId);
             activityWatcher.unwatch(sessionId);
+            await auditLogger.write({
+              operation: 'session.kill',
+              actor: auditActor(ws.auth),
+              target: { sessionId },
+              outcome: 'success',
+            });
             break;
           }
 
@@ -1617,14 +2459,10 @@ function createWSS(server, sessionManager, fileWatcher) {
               sendToClient(ws, 'error', { message: 'Session not found', code: 'SESSION_NOT_FOUND' });
               return;
             }
-            const absPath = path.resolve(readSession.workDir, filePath);
-            if (!absPath.startsWith(readSession.workDir)) {
-              sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
-              return;
-            }
             try {
+              const { realPath: absPath } = await resolveExistingInside(readSession.workDir, filePath);
               const stat = await fs.promises.stat(absPath);
-              if (stat.size > 5 * 1024 * 1024) {
+              if (stat.size > FILE_TRANSFER_MAX_BYTES) {
                 sendToClient(ws, 'error', { message: 'File too large (max 5MB)', code: 'INVALID_MESSAGE' });
                 return;
               }
@@ -1653,6 +2491,10 @@ function createWSS(server, sessionManager, fileWatcher) {
                 });
               }
             } catch (err) {
+              if (err instanceof PathSafetyError) {
+                sendPathError(sendToClient, ws);
+                return;
+              }
               sendToClient(ws, 'error', { message: `Cannot read file: ${err.message}`, code: 'INVALID_MESSAGE' });
             }
             break;
@@ -1669,15 +2511,21 @@ function createWSS(server, sessionManager, fileWatcher) {
               sendToClient(ws, 'error', { message: 'Session not found', code: 'SESSION_NOT_FOUND' });
               return;
             }
-            const writeAbsPath = path.resolve(writeSession.workDir, filePath);
-            if (!writeAbsPath.startsWith(writeSession.workDir)) {
-              sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
-              return;
-            }
             try {
+              const { realPath: writeAbsPath } = await resolveWritableInside(writeSession.workDir, filePath);
               await fs.promises.writeFile(writeAbsPath, content, 'utf-8');
               sendToClient(ws, 'file.saved', { sessionId, filePath });
+              await auditLogger.write({
+                operation: 'file.write',
+                actor: auditActor(ws.auth),
+                target: { sessionId, path: filePath },
+                outcome: 'success',
+              });
             } catch (err) {
+              if (err instanceof PathSafetyError) {
+                sendPathError(sendToClient, ws);
+                return;
+              }
               sendToClient(ws, 'error', { message: `Cannot write file: ${err.message}`, code: 'INVALID_MESSAGE' });
             }
             break;
@@ -1694,12 +2542,8 @@ function createWSS(server, sessionManager, fileWatcher) {
               sendToClient(ws, 'error', { message: 'Session not found', code: 'SESSION_NOT_FOUND' });
               return;
             }
-            const uploadAbsPath = path.resolve(uploadSession.workDir, filePath);
-            if (!uploadAbsPath.startsWith(uploadSession.workDir)) {
-              sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
-              return;
-            }
             try {
+              const { realPath: uploadAbsPath } = await resolveWritableInside(uploadSession.workDir, filePath);
               let buf;
               if (encoding === 'base64') {
                 buf = Buffer.from(content, 'base64');
@@ -1707,7 +2551,7 @@ function createWSS(server, sessionManager, fileWatcher) {
                 buf = Buffer.from(content, 'utf-8');
               }
               // 5MB decoded size limit
-              if (buf.length > 5 * 1024 * 1024) {
+              if (buf.length > FILE_TRANSFER_MAX_BYTES) {
                 sendToClient(ws, 'error', { message: 'File too large (max 5MB decoded)', code: 'INVALID_MESSAGE' });
                 return;
               }
@@ -1715,7 +2559,17 @@ function createWSS(server, sessionManager, fileWatcher) {
               await fs.promises.mkdir(path.dirname(uploadAbsPath), { recursive: true });
               await fs.promises.writeFile(uploadAbsPath, buf);
               sendToClient(ws, 'file.uploaded', { sessionId, filePath });
+              await auditLogger.write({
+                operation: 'file.upload',
+                actor: auditActor(ws.auth),
+                target: { sessionId, path: filePath, size: buf.length, encoding: encoding || 'utf-8' },
+                outcome: 'success',
+              });
             } catch (err) {
+              if (err instanceof PathSafetyError) {
+                sendPathError(sendToClient, ws);
+                return;
+              }
               sendToClient(ws, 'error', { message: `Upload failed: ${err.message}`, code: 'INVALID_MESSAGE' });
             }
             break;
@@ -1732,14 +2586,10 @@ function createWSS(server, sessionManager, fileWatcher) {
               sendToClient(ws, 'error', { message: 'Session not found', code: 'SESSION_NOT_FOUND' });
               return;
             }
-            const dlAbsPath = path.resolve(dlSession.workDir, filePath);
-            if (!dlAbsPath.startsWith(dlSession.workDir)) {
-              sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
-              return;
-            }
             try {
+              const { realPath: dlAbsPath } = await resolveExistingInside(dlSession.workDir, filePath);
               const stat = await fs.promises.stat(dlAbsPath);
-              if (stat.size > 5 * 1024 * 1024) {
+              if (stat.size > FILE_TRANSFER_MAX_BYTES) {
                 sendToClient(ws, 'error', { message: 'File too large (max 5MB)', code: 'INVALID_MESSAGE' });
                 return;
               }
@@ -1750,7 +2600,17 @@ function createWSS(server, sessionManager, fileWatcher) {
                 content: buf.toString('base64'),
                 size: stat.size,
               });
+              await auditLogger.write({
+                operation: 'file.download',
+                actor: auditActor(ws.auth),
+                target: { sessionId, path: filePath, size: stat.size },
+                outcome: 'success',
+              });
             } catch (err) {
+              if (err instanceof PathSafetyError) {
+                sendPathError(sendToClient, ws);
+                return;
+              }
               sendToClient(ws, 'error', { message: `Download failed: ${err.message}`, code: 'INVALID_MESSAGE' });
             }
             break;
@@ -1767,12 +2627,8 @@ function createWSS(server, sessionManager, fileWatcher) {
               sendToClient(ws, 'error', { message: 'Session not found', code: 'SESSION_NOT_FOUND' });
               return;
             }
-            const createAbsPath = path.resolve(createSession.workDir, filePath);
-            if (!createAbsPath.startsWith(createSession.workDir)) {
-              sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
-              return;
-            }
             try {
+              const { realPath: createAbsPath } = await resolveWritableInside(createSession.workDir, filePath);
               if (isDir) {
                 await fs.promises.mkdir(createAbsPath, { recursive: true });
               } else {
@@ -1783,7 +2639,9 @@ function createWSS(server, sessionManager, fileWatcher) {
               }
               sendToClient(ws, 'file.created', { sessionId, filePath, isDir: !!isDir });
             } catch (err) {
-              if (err.code === 'EEXIST') {
+              if (err instanceof PathSafetyError) {
+                sendPathError(sendToClient, ws);
+              } else if (err.code === 'EEXIST') {
                 sendToClient(ws, 'error', { message: 'File already exists', code: 'INVALID_MESSAGE' });
               } else {
                 sendToClient(ws, 'error', { message: `Cannot create: ${err.message}`, code: 'INVALID_MESSAGE' });
@@ -1803,25 +2661,34 @@ function createWSS(server, sessionManager, fileWatcher) {
               sendToClient(ws, 'error', { message: 'Session not found', code: 'SESSION_NOT_FOUND' });
               return;
             }
-            const delAbsPath = path.resolve(delSession.workDir, filePath);
-            if (!delAbsPath.startsWith(delSession.workDir)) {
-              sendToClient(ws, 'error', { message: 'Path traversal not allowed', code: 'INVALID_MESSAGE' });
-              return;
-            }
-            // Prevent deleting the workDir itself
-            if (delAbsPath === delSession.workDir) {
-              sendToClient(ws, 'error', { message: 'Cannot delete root directory', code: 'INVALID_MESSAGE' });
-              return;
-            }
             try {
-              const stat = await fs.promises.stat(delAbsPath);
-              if (stat.isDirectory()) {
+              const { root, requestedPath: delAbsPath, realPath } = await resolveExistingInside(delSession.workDir, filePath);
+              // Prevent deleting the workDir itself
+              if (realPath === root) {
+                sendToClient(ws, 'error', { message: 'Cannot delete root directory', code: 'INVALID_MESSAGE' });
+                return;
+              }
+
+              const lstat = await fs.promises.lstat(delAbsPath);
+              if (lstat.isSymbolicLink()) {
+                await fs.promises.unlink(delAbsPath);
+              } else if (lstat.isDirectory()) {
                 await fs.promises.rm(delAbsPath, { recursive: true });
               } else {
                 await fs.promises.unlink(delAbsPath);
               }
               sendToClient(ws, 'file.deleted', { sessionId, filePath });
+              await auditLogger.write({
+                operation: 'file.delete',
+                actor: auditActor(ws.auth),
+                target: { sessionId, path: filePath },
+                outcome: 'success',
+              });
             } catch (err) {
+              if (err instanceof PathSafetyError) {
+                sendPathError(sendToClient, ws);
+                return;
+              }
               sendToClient(ws, 'error', { message: `Cannot delete: ${err.message}`, code: 'INVALID_MESSAGE' });
             }
             break;
@@ -1918,10 +2785,76 @@ function createWSS(server, sessionManager, fileWatcher) {
 
 // ─── Section 9: REST API ─────────────────────────────────────────────────────
 
-function createRESTRouter(sessionManager, fileWatcher, broadcastFn) {
+function createRESTRouter(sessionManager, fileWatcher, broadcastFn, tokenStore, auditLogger) {
   const router = express.Router();
 
-  router.post('/sessions', (req, res) => {
+  router.use(requireAuth(tokenStore));
+
+  router.get('/auth/whoami', requireMinimumRole('viewer'), (req, res) => {
+    res.json(req.auth);
+  });
+
+  router.post('/auth/browser-session', requireMinimumRole('viewer'), async (req, res) => {
+    const session = await tokenStore.createBrowserSession(req.auth);
+    if (!session) {
+      clearBrowserSessionCookie(req, res);
+      return res.status(401).json({ error: 'AUTH_INVALID' });
+    }
+    setBrowserSessionCookie(req, res, session);
+    await auditLogger.write({
+      operation: 'auth.browser_session.create',
+      actor: auditActor(req.auth),
+      outcome: 'success',
+    });
+    res.json({ ok: true, auth: req.auth, expiresInSeconds: BROWSER_SESSION_MAX_AGE_SECONDS });
+  });
+
+  router.delete('/auth/browser-session', requireMinimumRole('viewer'), async (req, res) => {
+    clearBrowserSessionCookie(req, res);
+    await auditLogger.write({
+      operation: 'auth.browser_session.clear',
+      actor: auditActor(req.auth),
+      outcome: 'success',
+    });
+    res.json({ ok: true });
+  });
+
+  router.post('/tokens', requireMinimumRole('admin'), async (req, res) => {
+    try {
+      const { name, role = 'operator' } = req.body || {};
+      const created = await tokenStore.createToken({ name, role });
+      await auditLogger.write({
+        operation: 'token.create',
+        actor: auditActor(req.auth),
+        target: { tokenId: created.record.id, name: created.record.name, role: created.record.role },
+        outcome: 'success',
+      });
+      res.status(201).json({ ...created.record, token: created.token });
+    } catch (err) {
+      if (err.code === 'INVALID_ROLE') {
+        return res.status(400).json({ error: 'INVALID_ROLE' });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/tokens', requireMinimumRole('admin'), async (_req, res) => {
+    res.json({ tokens: await tokenStore.list() });
+  });
+
+  router.delete('/tokens/:id', requireMinimumRole('admin'), async (req, res) => {
+    const revoked = await tokenStore.revoke(req.params.id);
+    if (!revoked) return res.status(404).json({ error: 'TOKEN_NOT_FOUND' });
+    await auditLogger.write({
+      operation: 'token.revoke',
+      actor: auditActor(req.auth),
+      target: { tokenId: revoked.id },
+      outcome: 'success',
+    });
+    res.json({ ok: true });
+  });
+
+  router.post('/sessions', requireMinimumRole('operator'), async (req, res) => {
     try {
       const { cwd, workDir, label, agentType, resume } = req.body;
       const dir = cwd || workDir;
@@ -1930,8 +2863,14 @@ function createRESTRouter(sessionManager, fileWatcher, broadcastFn) {
       }
       const session = sessionManager.create(dir, label, agentType, !!resume);
       broadcastFn('session.update', session);
-      fileWatcher.watch(session.id, dir);
-      activityWatcher.watch(session.id, dir);
+      fileWatcher.watch(session.id, session.workDir);
+      activityWatcher.watch(session.id, session.workDir);
+      await auditLogger.write({
+        operation: 'session.create',
+        actor: auditActor(req.auth),
+        target: { sessionId: session.id, workDir: session.workDir, agentType: session.agentType },
+        outcome: 'success',
+      });
       res.status(201).json(session);
     } catch (err) {
       const status = err.message.includes('Maximum sessions') ? 429
@@ -1941,23 +2880,29 @@ function createRESTRouter(sessionManager, fileWatcher, broadcastFn) {
     }
   });
 
-  router.get('/sessions', (req, res) => {
+  router.get('/sessions', requireMinimumRole('viewer'), (req, res) => {
     const all = req.query.all === 'true';
     res.json(all ? sessionManager.listAll() : sessionManager.list());
   });
 
-  router.get('/sessions/:id', (req, res) => {
+  router.get('/sessions/:id', requireMinimumRole('viewer'), (req, res) => {
     const session = sessionManager.get(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     res.json(session);
   });
 
-  router.delete('/sessions/:id', (req, res) => {
+  router.delete('/sessions/:id', requireMinimumRole('operator'), async (req, res) => {
     const session = sessionManager.get(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     sessionManager.kill(req.params.id);
     fileWatcher.unwatch(req.params.id);
     activityWatcher.unwatch(req.params.id);
+    await auditLogger.write({
+      operation: 'session.kill',
+      actor: auditActor(req.auth),
+      target: { sessionId: req.params.id },
+      outcome: 'success',
+    });
     res.json({ ok: true });
   });
 
@@ -1967,23 +2912,33 @@ function createRESTRouter(sessionManager, fileWatcher, broadcastFn) {
 // ─── Section 10: Startup & Shutdown ──────────────────────────────────────────
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, isAllowedOrigin(origin));
+  },
+  credentials: true,
+}));
 app.use(express.json());
+app.use(rejectDisallowedBrowserOrigin);
 
 const httpServer = http.createServer(app);
 
 const sessionManager = new SessionManager();
 const fileWatcher = new FileWatcher();
 const activityWatcher = new ClaudeActivityWatcher();
+const auditLogger = new AuditLogger();
+const tokenStore = new TokenStore();
 
-const { wss, broadcast } = createWSS(httpServer, sessionManager, fileWatcher);
+await tokenStore.init(auditLogger);
+
+const { wss, broadcast } = createWSS(httpServer, sessionManager, fileWatcher, tokenStore, auditLogger);
 
 // Wire ClaudeActivityWatcher events to WS broadcast
 activityWatcher.on('activity', (payload) => {
   broadcast('claude.activity', payload);
 });
 
-app.use('/api', createRESTRouter(sessionManager, fileWatcher, broadcast));
+app.use('/api', createRESTRouter(sessionManager, fileWatcher, broadcast, tokenStore, auditLogger));
 
 // Health check
 app.get('/health', (_req, res) => res.json({ ok: true }));

@@ -1,0 +1,44 @@
+{
+  "frames": {
+    "door-closed": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 140,
+        "h": 240
+      }
+    },
+    "door-ajar": {
+      "frame": {
+        "x": 160,
+        "y": 0,
+        "w": 140,
+        "h": 240
+      }
+    },
+    "door-opening": {
+      "frame": {
+        "x": 280,
+        "y": 0,
+        "w": 140,
+        "h": 240
+      }
+    },
+    "door-open": {
+      "frame": {
+        "x": 420,
+        "y": 0,
+        "w": 140,
+        "h": 240
+      }
+    }
+  },
+  "meta": {
+    "image": "door.png",
+    "size": {
+      "w": 560,
+      "h": 240
+    },
+    "scale": 1
+  }
+}

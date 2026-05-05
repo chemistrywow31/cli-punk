@@ -119,8 +119,8 @@ Claude Punk 將從瀏覽器像素酒吧遊戲，改成一個 local-first 的終�
 │                       Shell / Agent CLIs                     │
 │                                                             │
 │  login shell PTY                                            │
-│  claude --dangerously-skip-permissions                      │
-│  codex --full-auto                                          │
+│  claude --enable-auto-mode                                  │
+│  codex --yolo                                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -184,8 +184,8 @@ Claude Punk 將從瀏覽器像素酒吧遊戲，改成一個 local-first 的終�
 ```
 
 - Auto-run command：
-  - Claude: `claude --dangerously-skip-permissions`
-  - Codex: `codex --full-auto`
+  - Claude: `claude --enable-auto-mode`
+  - Codex: `codex --yolo`
   - `resume === true` 時附加 `--resume`
   - `resume` 是 string 時附加 `--resume <conversationId>`
 - raw PTY output emit 為 `terminal.output`。

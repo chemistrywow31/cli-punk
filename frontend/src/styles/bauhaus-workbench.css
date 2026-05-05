@@ -1,0 +1,1290 @@
+body[data-theme="bauhaus"] {
+  --color-bg: #f8f5e9;
+  --color-bg-warm: #e9e3cf;
+  --color-text: #111111;
+  --color-text-rgb: 17, 17, 17;
+  --color-muted: #4a4a42;
+  --color-accent: #d62d20;
+  --color-accent-rgb: 214, 45, 32;
+  --color-gold: #f7c600;
+  --color-gold-rgb: 247, 198, 0;
+  --color-blue: #0057b8;
+  --color-blue-rgb: 0, 87, 184;
+  --color-green: #008f66;
+  --color-green-rgb: 0, 143, 102;
+  --color-panel: #fffdf2;
+  --color-code-bg: #111111;
+  --color-code-text: #fffdf2;
+  --color-code-muted: #5f6080;
+  --color-on-accent: #fffdf2;
+  --color-on-session: #111111;
+  --color-border-soft: rgba(var(--color-text-rgb), 0.18);
+  --color-border-muted: rgba(var(--color-text-rgb), 0.28);
+  --color-hover-bg: rgba(var(--color-blue-rgb), 0.08);
+  --color-selected-bg: rgba(var(--color-blue-rgb), 0.12);
+  --color-shadow: rgba(var(--color-blue-rgb), 0.18);
+  --color-accent-shadow: rgba(var(--color-accent-rgb), 0.2);
+  --color-input-border: var(--color-green);
+  --session-color-1: #f0c83a;
+  --session-color-2: #4f9d69;
+  --session-color-3: #4f7fd9;
+  --session-color-4: #c7614a;
+  --session-color-5: #8b6fd6;
+  --session-color-6: #d38d36;
+  --session-color-7: #2f9ca0;
+  --session-color-8: #bf5f8a;
+  --bg-primary: var(--color-code-bg);
+  --bg-secondary: var(--color-bg-warm);
+  --bg-panel: var(--color-panel);
+  --border-neon: var(--color-blue);
+  --border-glow: 0 0 0 transparent;
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-muted);
+  --accent-pink: var(--color-accent);
+  --accent-amber: var(--color-gold);
+  --accent-purple: var(--color-blue);
+  --sessions-width: 280px;
+  --detail-width: 430px;
+  --font-sans: "Arial Black", "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+}
+
+.workbench-shell {
+  position: relative;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 76px 68px minmax(0, 1fr) 42px;
+  gap: 10px;
+  padding: 10px;
+}
+
+.wb-header,
+.wb-status,
+.wb-pane,
+.wb-footer {
+  background: rgba(255, 253, 242, 0.96);
+  border: 2px solid var(--color-text);
+  box-shadow: 8px 8px 0 rgba(0, 87, 184, 0.16);
+}
+
+.wb-header {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 10px;
+  padding: 8px;
+}
+
+.wb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wb-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  color: #fffdf2;
+  background: var(--color-accent);
+  border: 2px solid var(--color-text);
+  font-weight: 900;
+}
+
+.wb-brand h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.wb-brand span,
+.label {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.wb-session-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.wb-session-strip button,
+.wb-actions button,
+.pane-head button,
+.pane-tabs button,
+.wb-detail-actions button,
+.session-row {
+  border: 2px solid var(--color-text);
+  border-radius: 0;
+  color: var(--color-text);
+  background: var(--color-panel);
+  font-family: var(--font-sans);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.wb-actions button,
+.pane-head button,
+.pane-tabs button,
+.wb-detail-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.wb-actions kbd,
+.pane-head kbd,
+.pane-tabs kbd,
+.wb-detail-actions kbd,
+.wb-hotkeys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  color: var(--color-blue);
+  background: #fffdf2;
+  border: 2px solid var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.wb-session-strip button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.wb-session-strip button span,
+.session-key {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 26px;
+  color: #111;
+  background: var(--session-color, var(--color-gold));
+  border-right: 2px solid var(--color-text);
+  margin-left: -10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.wb-session-strip button.active,
+.pane-tabs button.active {
+  color: #fffdf2;
+  background: var(--color-accent);
+}
+
+.wb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-actions button,
+.pane-head button,
+.pane-tabs button,
+.wb-detail-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.wb-actions button:first-child,
+.pane-head button[data-action="new"] {
+  color: #fffdf2;
+  background: var(--color-accent);
+}
+
+.wb-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.wb-status > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 12px;
+  border-right: 2px solid var(--color-text);
+}
+
+.wb-status > div:last-child { border-right: 0; }
+.wb-status strong { font-size: 18px; line-height: 1.1; }
+.wb-connection[data-state="online"] { color: var(--color-green); }
+.wb-connection[data-state="offline"],
+.wb-connection[data-state="reconnecting"],
+.wb-connection[data-state="auth required"],
+.wb-connection[data-state="auth invalid"] { color: var(--color-accent); }
+
+.wb-auth-panel {
+  position: absolute;
+  top: 154px;
+  right: 18px;
+  z-index: 30;
+  width: min(460px, calc(100vw - 36px));
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 2px solid var(--color-text);
+  box-shadow: 8px 8px 0 rgba(214, 45, 32, 0.22);
+}
+
+.wb-auth-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.wb-auth-form h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.wb-auth-form p {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.wb-auth-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.wb-auth-input {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px;
+  color: #fffdf2;
+  background: #070914;
+  border: 2px solid var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.wb-auth-input:focus {
+  outline: 3px solid rgba(0, 87, 184, 0.24);
+}
+
+.wb-auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.wb-auth-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 2px solid var(--color-text);
+  font-family: var(--font-sans);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.wb-auth-actions button[type="submit"] {
+  color: #fffdf2;
+  background: var(--color-green);
+}
+
+.wb-auth-actions kbd {
+  margin-left: 8px;
+  padding: 1px 5px;
+  color: var(--color-blue);
+  background: #fffdf2;
+  border: 2px solid var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.wb-auth-message {
+  min-height: 16px;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.wb-grid {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--sessions-width) 6px minmax(360px, 1fr) 6px var(--detail-width);
+  gap: 6px;
+}
+
+.wb-pane-restore {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(760px, calc(100vw - 40px));
+  padding: 8px 10px;
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 2px solid var(--color-text);
+  box-shadow: 8px 8px 0 rgba(0, 87, 184, 0.18);
+  transform: translateX(-50%);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.wb-pane-restore span:first-child {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.wb-pane-restore button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 2px solid var(--color-text);
+  font-family: var(--font-sans);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.wb-pane-restore kbd {
+  display: inline-grid;
+  place-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  color: var(--color-blue);
+  background: #fffdf2;
+  border: 1px solid var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.wb-grid.pane-collapsed-sessions {
+  grid-template-columns: 0 0 minmax(360px, 1fr) 6px var(--detail-width);
+}
+
+.wb-grid.pane-collapsed-terminal {
+  grid-template-columns: var(--sessions-width) 6px 0 0 minmax(320px, 1fr);
+}
+
+.wb-grid.pane-collapsed-detail {
+  grid-template-columns: var(--sessions-width) 6px minmax(360px, 1fr) 0 0;
+}
+
+.wb-grid.pane-collapsed-sessions.pane-collapsed-detail {
+  grid-template-columns: 0 0 minmax(360px, 1fr) 0 0;
+}
+
+.wb-grid.pane-collapsed-sessions .wb-sessions,
+.wb-grid.pane-collapsed-terminal .wb-terminal,
+.wb-grid.pane-collapsed-detail .wb-detail,
+.wb-grid.pane-collapsed-sessions [data-resize-pane="sessions"],
+.wb-grid.pane-collapsed-terminal [data-resize-pane="detail"],
+.wb-grid.pane-collapsed-detail [data-resize-pane="detail"] {
+  display: none;
+}
+
+.wb-grid-resizer {
+  min-width: 6px;
+  cursor: col-resize;
+  background: linear-gradient(to right, transparent 0 2px, rgba(17, 17, 17, 0.45) 2px 4px, transparent 4px);
+}
+
+.wb-grid-resizer:hover {
+  background: var(--color-blue);
+}
+
+.wb-resize-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  cursor: col-resize;
+}
+
+.wb-pane {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 46px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--color-text);
+  background: var(--color-bg-warm);
+}
+
+.pane-head h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.pane-tabs,
+.wb-detail-actions,
+.pane-head-right,
+.pane-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.pane-head-right {
+  align-items: center;
+  min-width: 0;
+}
+
+.wb-detail-tabs {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.wb-session-list,
+.wb-terminal-mount,
+.wb-detail-mount {
+  min-height: 0;
+  overflow: auto;
+}
+
+.wb-session-list {
+  padding: 8px;
+}
+
+.session-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 0 8px;
+  margin-bottom: 8px;
+  padding: 0 8px 8px 0;
+  text-align: left;
+}
+
+.session-row.active {
+  box-shadow: 6px 6px 0 rgba(214, 45, 32, 0.2);
+}
+
+.wb-pane.is-focused {
+  box-shadow: 8px 8px 0 rgba(0, 87, 184, 0.2), inset 0 0 0 3px rgba(0, 87, 184, 0.18);
+}
+
+.session-key {
+  grid-row: 1 / 3;
+  height: 100%;
+  margin: 0;
+  border-right: 2px solid var(--color-text);
+}
+
+.session-main {
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.session-main strong,
+.session-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-main small,
+.session-files {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.session-state {
+  align-self: start;
+  margin-top: 8px;
+  padding: 2px 6px;
+  color: #fffdf2;
+  background: var(--color-blue);
+  border: 2px solid var(--color-text);
+  font-size: 11px;
+}
+
+.session-state.terminated { background: var(--color-accent); }
+.session-files { grid-column: 2 / 4; }
+
+.wb-terminal-mount {
+  background: #111;
+}
+
+.wb-terminal-mount .terminal-with-sidebar {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+}
+
+.wb-detail-mount > div {
+  height: 100%;
+}
+
+.empty-state {
+  padding: 18px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+}
+
+.wb-footer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.wb-notices {
+  overflow: hidden;
+  color: var(--color-accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-hotkeys {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+body[data-theme="bauhaus"] .cyberpunk-panel,
+body[data-theme="bauhaus"] #dialog-box,
+body[data-theme="bauhaus"] .folder-picker-panel,
+body[data-theme="bauhaus"] .resume-picker-panel,
+body[data-theme="bauhaus"] .theme-settings-panel,
+body[data-theme="bauhaus"] #jukebox-panel,
+body[data-theme="bauhaus"] #retro-tv-panel {
+  border: 2px solid var(--color-text) !important;
+  border-radius: 0 !important;
+  color: var(--color-text);
+  background: var(--color-panel) !important;
+  box-shadow: 8px 8px 0 var(--color-shadow) !important;
+}
+
+body[data-theme="bauhaus"] button {
+  border-radius: 0;
+}
+
+body[data-theme="bauhaus"] input,
+body[data-theme="bauhaus"] textarea {
+  border-radius: 0;
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] {
+  --color-bg: #15120f;
+  --color-bg-warm: #2b241b;
+  --color-text: #f2eadb;
+  --color-text-rgb: 242, 234, 219;
+  --color-muted: #b1a692;
+  --color-accent: #c7573d;
+  --color-accent-rgb: 199, 87, 61;
+  --color-gold: #e1b953;
+  --color-gold-rgb: 225, 185, 83;
+  --color-blue: #5da3d8;
+  --color-blue-rgb: 93, 163, 216;
+  --color-green: #65ad82;
+  --color-green-rgb: 101, 173, 130;
+  --color-panel: #221c16;
+  --color-code-bg: #08090c;
+  --color-code-text: #f4ead8;
+  --color-code-muted: #8d8792;
+  --color-on-accent: #fff8ec;
+  --color-on-session: #15120f;
+  --color-input-border: #5f8f91;
+  --session-color-1: #c7573d;
+  --session-color-2: #e1b953;
+  --session-color-3: #65ad82;
+  --session-color-4: #5da3d8;
+  --session-color-5: #b07bb4;
+  --session-color-6: #d08a4d;
+  --session-color-7: #58a7a0;
+  --session-color-8: #d07085;
+  --color-shadow: rgba(var(--color-blue-rgb), 0.16);
+  background: var(--color-bg);
+}
+
+body[data-theme="bauhaus"][data-page-style="contrast"] {
+  --color-bg: #fffdf5;
+  --color-bg-warm: #ece8da;
+  --color-text: #050505;
+  --color-text-rgb: 5, 5, 5;
+  --color-muted: #3e3e39;
+  --color-accent: #d71920;
+  --color-accent-rgb: 215, 25, 32;
+  --color-gold: #ffd200;
+  --color-gold-rgb: 255, 210, 0;
+  --color-blue: #0044cc;
+  --color-blue-rgb: 0, 68, 204;
+  --color-green: #008564;
+  --color-green-rgb: 0, 133, 100;
+  --color-panel: #ffffff;
+  --color-code-bg: #050505;
+  --color-code-text: #ffffff;
+  --color-code-muted: #55555f;
+  --color-on-accent: #ffffff;
+  --color-on-session: #050505;
+  --color-input-border: #0044cc;
+  --session-color-1: #ffd200;
+  --session-color-2: #0044cc;
+  --session-color-3: #d71920;
+  --session-color-4: #008564;
+  --session-color-5: #7a2cb7;
+  --session-color-6: #f26b21;
+  --session-color-7: #008e9b;
+  --session-color-8: #c2185b;
+  --color-shadow: rgba(var(--color-blue-rgb), 0.18);
+  background: var(--color-bg);
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .wb-header,
+body[data-theme="bauhaus"][data-page-style="night"] .wb-status,
+body[data-theme="bauhaus"][data-page-style="night"] .wb-pane,
+body[data-theme="bauhaus"][data-page-style="night"] .wb-footer,
+body[data-theme="bauhaus"][data-page-style="night"] .folder-picker-panel,
+body[data-theme="bauhaus"][data-page-style="night"] .resume-picker-panel,
+body[data-theme="bauhaus"][data-page-style="night"] .theme-settings-panel,
+body[data-theme="bauhaus"][data-page-style="night"] .wb-auth-panel {
+  background: var(--color-panel) !important;
+  box-shadow: 8px 8px 0 var(--color-shadow) !important;
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .pane-head,
+body[data-theme="bauhaus"][data-page-style="night"] .files-tab .files-sidebar .files-header,
+body[data-theme="bauhaus"][data-page-style="night"] .fe-toolbar,
+body[data-theme="bauhaus"][data-page-style="night"] .fwp-header {
+  background: var(--color-bg-warm);
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .files-tab,
+body[data-theme="bauhaus"][data-page-style="night"] .files-tab .files-sidebar {
+  color: var(--color-text);
+  background: var(--color-panel);
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .files-count,
+body[data-theme="bauhaus"][data-page-style="night"] .file-label,
+body[data-theme="bauhaus"][data-page-style="night"] .fe-filename {
+  color: var(--color-text);
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .file-node.dir > .file-row .file-label {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .fp-field input,
+body[data-theme="bauhaus"][data-page-style="night"] .wb-auth-input {
+  color: var(--color-code-text);
+  background: var(--color-code-bg);
+}
+
+body[data-theme="bauhaus"][data-page-style="night"] .file-size {
+  color: var(--color-muted);
+}
+
+body[data-theme="bauhaus"][data-page-style="contrast"] .wb-header,
+body[data-theme="bauhaus"][data-page-style="contrast"] .wb-status,
+body[data-theme="bauhaus"][data-page-style="contrast"] .wb-pane,
+body[data-theme="bauhaus"][data-page-style="contrast"] .wb-footer,
+body[data-theme="bauhaus"][data-page-style="contrast"] .folder-picker-panel,
+body[data-theme="bauhaus"][data-page-style="contrast"] .resume-picker-panel,
+body[data-theme="bauhaus"][data-page-style="contrast"] .theme-settings-panel,
+body[data-theme="bauhaus"][data-page-style="contrast"] .wb-auth-panel {
+  background: var(--color-panel) !important;
+  box-shadow: 8px 8px 0 var(--color-shadow) !important;
+}
+
+body[data-theme="bauhaus"][data-page-style="contrast"] .pane-head,
+body[data-theme="bauhaus"][data-page-style="contrast"] .files-tab .files-sidebar .files-header,
+body[data-theme="bauhaus"][data-page-style="contrast"] .fe-toolbar {
+  background: var(--color-bg-warm);
+}
+
+body[data-theme="bauhaus"] .file-warp-panel,
+body[data-theme="bauhaus"] .files-sidebar,
+body[data-theme="bauhaus"] .file-editor,
+body[data-theme="bauhaus"] .claude-config-tab,
+body[data-theme="bauhaus"] .activity-panel {
+  border-radius: 0;
+}
+
+body[data-theme="bauhaus"] .folder-picker-panel {
+  width: 560px;
+  background: var(--color-panel) !important;
+}
+
+body[data-theme="bauhaus"] .fp-header,
+body[data-theme="bauhaus"] .fp-breadcrumb,
+body[data-theme="bauhaus"] .fp-footer,
+body[data-theme="bauhaus"] .ts-header {
+  border-color: var(--color-border-soft);
+}
+
+body[data-theme="bauhaus"] .fp-title,
+body[data-theme="bauhaus"] .ts-title {
+  color: var(--color-blue);
+  letter-spacing: 2px;
+}
+
+body[data-theme="bauhaus"] .fp-section-label,
+body[data-theme="bauhaus"] .fp-field label,
+body[data-theme="bauhaus"] .ts-section-label {
+  color: var(--color-muted);
+}
+
+body[data-theme="bauhaus"] .fp-entry-dir,
+body[data-theme="bauhaus"] .fp-crumb:hover,
+body[data-theme="bauhaus"] .fp-recent-name {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fp-entry-dir:hover,
+body[data-theme="bauhaus"] .fp-recent-item:hover {
+  background: var(--color-hover-bg);
+}
+
+body[data-theme="bauhaus"] .fp-entry-file,
+body[data-theme="bauhaus"] .fp-crumb,
+body[data-theme="bauhaus"] .fp-recent-path {
+  color: var(--color-code-muted);
+}
+
+body[data-theme="bauhaus"] .fp-field input {
+  color: var(--color-code-text);
+  background: var(--color-code-bg);
+  border: 2px solid var(--color-input-border);
+}
+
+body[data-theme="bauhaus"] .fp-field input:focus {
+  border-color: var(--color-blue);
+  box-shadow: 0 0 0 2px var(--color-shadow);
+}
+
+body[data-theme="bauhaus"] .fp-agent-option input[type="radio"] {
+  border: 2px solid var(--color-code-muted);
+  background: var(--color-panel);
+}
+
+body[data-theme="bauhaus"] .fp-agent-option input[type="radio"]:checked {
+  border-color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fp-agent-option input[type="radio"]:checked::after {
+  background: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fp-agent-claude {
+  color: var(--color-gold);
+}
+
+body[data-theme="bauhaus"] .fp-agent-codex {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fp-confirm {
+  color: var(--color-on-accent);
+  background: var(--color-green);
+}
+
+body[data-theme="bauhaus"] .fp-confirm:hover {
+  background: var(--color-blue);
+  box-shadow: none;
+}
+
+body[data-theme="bauhaus"] .files-tab {
+  background: var(--color-panel);
+  color: var(--color-text);
+}
+
+body[data-theme="bauhaus"] .files-tab .files-sidebar {
+  background: var(--color-panel);
+  border-right: 2px solid var(--color-border-muted);
+}
+
+body[data-theme="bauhaus"] .files-tab .files-sidebar .files-header,
+body[data-theme="bauhaus"] .fe-toolbar {
+  color: var(--color-text);
+  background: var(--color-bg-warm);
+  border-bottom: 2px solid var(--color-border-soft);
+}
+
+body[data-theme="bauhaus"] .files-count,
+body[data-theme="bauhaus"] .file-label,
+body[data-theme="bauhaus"] .fe-filename {
+  color: var(--color-text);
+}
+
+body[data-theme="bauhaus"] .file-node.dir > .file-row .file-label {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .file-size {
+  color: var(--color-muted);
+}
+
+body[data-theme="bauhaus"] .file-row:hover,
+body[data-theme="bauhaus"] .file-node.selected > .file-row .file-label {
+  background: var(--color-selected-bg);
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .files-upload,
+body[data-theme="bauhaus"] .files-new-file,
+body[data-theme="bauhaus"] .files-new-dir,
+body[data-theme="bauhaus"] .files-refresh,
+body[data-theme="bauhaus"] .file-download-btn,
+body[data-theme="bauhaus"] .file-delete-btn,
+body[data-theme="bauhaus"] .fe-toggle-preview,
+body[data-theme="bauhaus"] .fe-toggle-edit,
+body[data-theme="bauhaus"] .fe-save,
+body[data-theme="bauhaus"] .fe-download,
+body[data-theme="bauhaus"] .fe-zoom-out,
+body[data-theme="bauhaus"] .fe-zoom-reset,
+body[data-theme="bauhaus"] .fe-zoom-in,
+body[data-theme="bauhaus"] .fe-zoom-input,
+body[data-theme="bauhaus"] .ts-font-btn {
+  color: var(--color-text);
+  background: var(--color-panel);
+  border: 2px solid var(--color-text);
+}
+
+body[data-theme="bauhaus"] .fe-actions kbd {
+  color: var(--color-blue);
+  background: var(--color-panel);
+  border: 1px solid var(--color-text);
+}
+
+body[data-theme="bauhaus"] .fe-editor-container,
+body[data-theme="bauhaus"] .fe-preview-container,
+body[data-theme="bauhaus"] .fe-preview-iframe {
+  background: var(--color-code-bg);
+}
+
+body[data-theme="bauhaus"] .theme-settings-panel {
+  width: 420px;
+}
+
+body[data-theme="bauhaus"] .ts-body {
+  min-height: 150px;
+}
+
+/* Keep all browser workbench chrome tied to the selected page style. */
+body[data-theme="bauhaus"] .wb-header,
+body[data-theme="bauhaus"] .wb-status,
+body[data-theme="bauhaus"] .wb-pane,
+body[data-theme="bauhaus"] .wb-footer,
+body[data-theme="bauhaus"] .wb-pane-restore,
+body[data-theme="bauhaus"] .folder-picker-panel,
+body[data-theme="bauhaus"] .resume-picker-panel,
+body[data-theme="bauhaus"] .theme-settings-panel,
+body[data-theme="bauhaus"] .wb-auth-panel {
+  background: var(--color-panel) !important;
+  box-shadow: 8px 8px 0 var(--color-shadow) !important;
+}
+
+body[data-theme="bauhaus"] .wb-header,
+body[data-theme="bauhaus"] .wb-status,
+body[data-theme="bauhaus"] .wb-pane,
+body[data-theme="bauhaus"] .wb-footer,
+body[data-theme="bauhaus"] .wb-pane-restore,
+body[data-theme="bauhaus"] .cyberpunk-panel,
+body[data-theme="bauhaus"] .folder-picker-panel,
+body[data-theme="bauhaus"] .resume-picker-panel,
+body[data-theme="bauhaus"] .theme-settings-panel,
+body[data-theme="bauhaus"] .wb-auth-panel {
+  border-color: var(--color-text) !important;
+}
+
+body[data-theme="bauhaus"] .wb-mark,
+body[data-theme="bauhaus"] .wb-session-strip button.active,
+body[data-theme="bauhaus"] .pane-tabs button.active,
+body[data-theme="bauhaus"] .wb-actions button:first-child,
+body[data-theme="bauhaus"] .pane-head button[data-action="new"] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+}
+
+body[data-theme="bauhaus"] .wb-actions kbd,
+body[data-theme="bauhaus"] .pane-head kbd,
+body[data-theme="bauhaus"] .pane-tabs kbd,
+body[data-theme="bauhaus"] .wb-detail-actions kbd,
+body[data-theme="bauhaus"] .wb-hotkeys kbd,
+body[data-theme="bauhaus"] .wb-pane-restore kbd,
+body[data-theme="bauhaus"] .wb-auth-actions kbd,
+body[data-theme="bauhaus"] .fe-actions kbd {
+  color: var(--color-blue);
+  background: var(--color-panel);
+  border-color: var(--color-text);
+}
+
+body[data-theme="bauhaus"] .wb-session-strip button span,
+body[data-theme="bauhaus"] .session-key {
+  color: var(--color-on-session);
+  background: var(--session-color, var(--session-color-1));
+}
+
+body[data-theme="bauhaus"] .session-row.active {
+  box-shadow: 6px 6px 0 var(--color-accent-shadow);
+}
+
+body[data-theme="bauhaus"] .wb-pane.is-focused {
+  box-shadow: 8px 8px 0 var(--color-shadow), inset 0 0 0 3px var(--color-shadow);
+}
+
+body[data-theme="bauhaus"] .session-state {
+  color: var(--color-on-accent);
+  background: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .session-state.terminated,
+body[data-theme="bauhaus"] .wb-notices,
+body[data-theme="bauhaus"] .wb-auth-message {
+  color: var(--color-accent);
+}
+
+body[data-theme="bauhaus"] .pane-head,
+body[data-theme="bauhaus"] .files-tab .files-sidebar .files-header,
+body[data-theme="bauhaus"] .fe-toolbar,
+body[data-theme="bauhaus"] .fwp-header {
+  color: var(--color-text);
+  background: var(--color-bg-warm);
+  border-color: var(--color-border-soft);
+}
+
+body[data-theme="bauhaus"] .wb-status > div,
+body[data-theme="bauhaus"] .wb-grid-resizer,
+body[data-theme="bauhaus"] .files-tab .files-sidebar,
+body[data-theme="bauhaus"] .file-warp-panel {
+  border-color: var(--color-border-muted);
+}
+
+body[data-theme="bauhaus"] .wb-grid-resizer {
+  background: linear-gradient(to right, transparent 0 2px, var(--color-border-muted) 2px 4px, transparent 4px);
+}
+
+body[data-theme="bauhaus"] .wb-grid-resizer:hover {
+  background: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .wb-terminal-mount,
+body[data-theme="bauhaus"] .fe-editor-container,
+body[data-theme="bauhaus"] .fe-preview-container,
+body[data-theme="bauhaus"] .fe-preview-iframe {
+  background: var(--color-code-bg);
+}
+
+body[data-theme="bauhaus"] .wb-auth-input,
+body[data-theme="bauhaus"] .fp-field input,
+body[data-theme="bauhaus"] .fwp-cmd-input {
+  color: var(--color-code-text);
+  background: var(--color-code-bg);
+  border-color: var(--color-input-border);
+}
+
+body[data-theme="bauhaus"] .wb-auth-input:focus,
+body[data-theme="bauhaus"] .fp-field input:focus,
+body[data-theme="bauhaus"] .fwp-cmd-input:focus {
+  border-color: var(--color-blue);
+  box-shadow: 0 0 0 2px var(--color-shadow);
+  outline: none;
+}
+
+body[data-theme="bauhaus"] .wb-auth-actions button[type="submit"],
+body[data-theme="bauhaus"] .fp-confirm {
+  color: var(--color-on-accent);
+  background: var(--color-green);
+}
+
+body[data-theme="bauhaus"] .fp-confirm:hover {
+  background: var(--color-blue);
+  box-shadow: none;
+}
+
+body[data-theme="bauhaus"] .fp-header,
+body[data-theme="bauhaus"] .fp-breadcrumb,
+body[data-theme="bauhaus"] .fp-footer,
+body[data-theme="bauhaus"] .ts-header,
+body[data-theme="bauhaus"] .rp-header,
+body[data-theme="bauhaus"] .rp-dir-section,
+body[data-theme="bauhaus"] .activity-header,
+body[data-theme="bauhaus"] .activity-workflow,
+body[data-theme="bauhaus"] .activity-phases,
+body[data-theme="bauhaus"] .config-header {
+  border-color: var(--color-border-soft);
+}
+
+body[data-theme="bauhaus"] .fp-title,
+body[data-theme="bauhaus"] .ts-title,
+body[data-theme="bauhaus"] .rp-title,
+body[data-theme="bauhaus"] .config-title,
+body[data-theme="bauhaus"] .activity-title,
+body[data-theme="bauhaus"] .ts-font-value {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fp-section-label,
+body[data-theme="bauhaus"] .fp-field label,
+body[data-theme="bauhaus"] .ts-section-label,
+body[data-theme="bauhaus"] .rp-section-label,
+body[data-theme="bauhaus"] .label,
+body[data-theme="bauhaus"] .wb-brand span,
+body[data-theme="bauhaus"] .empty-state {
+  color: var(--color-muted);
+}
+
+body[data-theme="bauhaus"] .fp-entry-dir,
+body[data-theme="bauhaus"] .fp-crumb:hover,
+body[data-theme="bauhaus"] .fp-recent-name,
+body[data-theme="bauhaus"] .rp-dir-name,
+body[data-theme="bauhaus"] .rp-conv-time,
+body[data-theme="bauhaus"] .config-item-header {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fp-entry-dir:hover,
+body[data-theme="bauhaus"] .fp-recent-item:hover,
+body[data-theme="bauhaus"] .rp-dir-item:hover,
+body[data-theme="bauhaus"] .rp-dir-item.active,
+body[data-theme="bauhaus"] .rp-conv-item:hover,
+body[data-theme="bauhaus"] .ts-tab:hover,
+body[data-theme="bauhaus"] .ts-tab.active,
+body[data-theme="bauhaus"] .ts-style-option:hover,
+body[data-theme="bauhaus"] .ts-style-option.active,
+body[data-theme="bauhaus"] .ts-bg-item:hover,
+body[data-theme="bauhaus"] .ts-bg-item.active {
+  background: var(--color-hover-bg);
+  border-color: var(--color-blue);
+  color: var(--color-blue);
+  box-shadow: none;
+}
+
+body[data-theme="bauhaus"] .fp-entry-file,
+body[data-theme="bauhaus"] .fp-crumb,
+body[data-theme="bauhaus"] .fp-recent-path,
+body[data-theme="bauhaus"] .rp-dir-path,
+body[data-theme="bauhaus"] .rp-conv-text,
+body[data-theme="bauhaus"] .rp-conv-size,
+body[data-theme="bauhaus"] .fwp-file-name,
+body[data-theme="bauhaus"] .fwp-toggle,
+body[data-theme="bauhaus"] .fwp-loading,
+body[data-theme="bauhaus"] .fwp-empty,
+body[data-theme="bauhaus"] .fwp-refresh,
+body[data-theme="bauhaus"] .fwp-tab,
+body[data-theme="bauhaus"] .fwp-cmd-del,
+body[data-theme="bauhaus"] .fwp-cmd-add-btn,
+body[data-theme="bauhaus"] .fwp-cmd-save,
+body[data-theme="bauhaus"] .fwp-cmd-cancel,
+body[data-theme="bauhaus"] .files-count,
+body[data-theme="bauhaus"] .file-size,
+body[data-theme="bauhaus"] .fe-filename {
+  color: var(--color-muted);
+}
+
+body[data-theme="bauhaus"] .fp-agent-claude,
+body[data-theme="bauhaus"] .fwp-cmd-label,
+body[data-theme="bauhaus"] .fe-save,
+body[data-theme="bauhaus"] .files-count {
+  color: var(--color-gold);
+}
+
+body[data-theme="bauhaus"] .fp-agent-codex,
+body[data-theme="bauhaus"] .fwp-folder-name,
+body[data-theme="bauhaus"] .file-node.dir > .file-row .file-label,
+body[data-theme="bauhaus"] .file-node.dir > .file-label {
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .files-tab,
+body[data-theme="bauhaus"] .files-tab .files-sidebar,
+body[data-theme="bauhaus"] .file-editor,
+body[data-theme="bauhaus"] .claude-config-tab,
+body[data-theme="bauhaus"] .activity-panel,
+body[data-theme="bauhaus"] .file-warp-panel,
+body[data-theme="bauhaus"] .ts-sidebar,
+body[data-theme="bauhaus"] .ts-style-option,
+body[data-theme="bauhaus"] .ts-bg-item,
+body[data-theme="bauhaus"] .ts-font-btn,
+body[data-theme="bauhaus"] .rp-conv-item,
+body[data-theme="bauhaus"] .config-item-content {
+  color: var(--color-text);
+  background: var(--color-panel);
+}
+
+body[data-theme="bauhaus"] .file-row:hover,
+body[data-theme="bauhaus"] .file-node.selected > .file-row .file-label,
+body[data-theme="bauhaus"] .fwp-row:hover,
+body[data-theme="bauhaus"] .fwp-cmd-item:hover {
+  background: var(--color-selected-bg);
+  color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .files-upload,
+body[data-theme="bauhaus"] .files-new-file,
+body[data-theme="bauhaus"] .files-new-dir,
+body[data-theme="bauhaus"] .files-refresh,
+body[data-theme="bauhaus"] .file-download-btn,
+body[data-theme="bauhaus"] .file-delete-btn,
+body[data-theme="bauhaus"] .fe-toggle-preview,
+body[data-theme="bauhaus"] .fe-toggle-edit,
+body[data-theme="bauhaus"] .fe-save,
+body[data-theme="bauhaus"] .fe-download,
+body[data-theme="bauhaus"] .fe-zoom-out,
+body[data-theme="bauhaus"] .fe-zoom-reset,
+body[data-theme="bauhaus"] .fe-zoom-in,
+body[data-theme="bauhaus"] .fe-zoom-input,
+body[data-theme="bauhaus"] .ts-font-btn,
+body[data-theme="bauhaus"] .ts-tab,
+body[data-theme="bauhaus"] .fwp-refresh,
+body[data-theme="bauhaus"] .fwp-tab,
+body[data-theme="bauhaus"] .fwp-cmd-add-btn,
+body[data-theme="bauhaus"] .fwp-cmd-save,
+body[data-theme="bauhaus"] .fwp-cmd-cancel,
+body[data-theme="bauhaus"] .fp-close,
+body[data-theme="bauhaus"] .fp-back,
+body[data-theme="bauhaus"] .fp-cancel,
+body[data-theme="bauhaus"] .rp-close,
+body[data-theme="bauhaus"] .activity-btn,
+body[data-theme="bauhaus"] .config-refresh {
+  color: var(--color-text);
+  background: var(--color-panel);
+  border-color: var(--color-text);
+}
+
+body[data-theme="bauhaus"] .files-upload:hover,
+body[data-theme="bauhaus"] .files-new-file:hover,
+body[data-theme="bauhaus"] .files-new-dir:hover,
+body[data-theme="bauhaus"] .files-refresh:hover,
+body[data-theme="bauhaus"] .file-download-btn:hover,
+body[data-theme="bauhaus"] .fe-toggle-preview:hover,
+body[data-theme="bauhaus"] .fe-toggle-edit:hover,
+body[data-theme="bauhaus"] .fe-save:hover,
+body[data-theme="bauhaus"] .fe-download:hover,
+body[data-theme="bauhaus"] .fe-zoom-out:hover,
+body[data-theme="bauhaus"] .fe-zoom-reset:hover,
+body[data-theme="bauhaus"] .fe-zoom-in:hover,
+body[data-theme="bauhaus"] .fe-zoom-input:hover,
+body[data-theme="bauhaus"] .fwp-tab:hover,
+body[data-theme="bauhaus"] .fwp-tab.active,
+body[data-theme="bauhaus"] .fwp-refresh:hover,
+body[data-theme="bauhaus"] .fwp-cmd-add-btn:hover,
+body[data-theme="bauhaus"] .fwp-cmd-save:hover,
+body[data-theme="bauhaus"] .config-refresh:hover,
+body[data-theme="bauhaus"] .activity-btn:hover,
+body[data-theme="bauhaus"] .fp-back:hover {
+  color: var(--color-blue);
+  border-color: var(--color-blue);
+  background: var(--color-hover-bg);
+}
+
+body[data-theme="bauhaus"] .file-delete-btn:hover,
+body[data-theme="bauhaus"] .fwp-cmd-del:hover,
+body[data-theme="bauhaus"] .fwp-cmd-cancel:hover,
+body[data-theme="bauhaus"] .fp-close:hover,
+body[data-theme="bauhaus"] .rp-close:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+body[data-theme="bauhaus"] .fwp-header,
+body[data-theme="bauhaus"] .fwp-cmd-add-row,
+body[data-theme="bauhaus"] .fwp-cmd-form,
+body[data-theme="bauhaus"] .files-upload-status {
+  border-color: var(--color-border-soft);
+}
+
+body[data-theme="bauhaus"] .files-upload-status {
+  color: var(--color-blue);
+  background: var(--color-bg-warm);
+}
+
+body[data-theme="bauhaus"] .files-sidebar.drop-active {
+  background: var(--color-hover-bg);
+  border-color: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .resize-handle-h::after,
+body[data-theme="bauhaus"] .resize-handle-v::after,
+body[data-theme="bauhaus"] .context-bar-fill,
+body[data-theme="bauhaus"] .fwp-tree::-webkit-scrollbar-thumb,
+body[data-theme="bauhaus"] .fwp-commands::-webkit-scrollbar-thumb {
+  background: var(--color-blue);
+}
+
+body[data-theme="bauhaus"] .fwp-tree::-webkit-scrollbar-track,
+body[data-theme="bauhaus"] .fwp-commands::-webkit-scrollbar-track,
+body[data-theme="bauhaus"] .context-bar-track {
+  background: var(--color-bg-warm);
+  border-color: var(--color-border-soft);
+}
+
+body[data-theme="bauhaus"] .fe-image,
+body[data-theme="bauhaus"] .config-item-content,
+body[data-theme="bauhaus"] .rp-dir-item,
+body[data-theme="bauhaus"] .rp-conv-item,
+body[data-theme="bauhaus"] .ts-tab,
+body[data-theme="bauhaus"] .ts-style-option,
+body[data-theme="bauhaus"] .ts-bg-item {
+  border-color: var(--color-border-soft);
+}
+
+@media (max-width: 1180px) {
+  .workbench-shell {
+    grid-template-rows: auto auto minmax(0, 1fr) 42px;
+  }
+
+  .wb-header {
+    grid-template-columns: 1fr;
+  }
+
+  .wb-grid {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .wb-detail {
+    grid-column: 1 / -1;
+    min-height: 280px;
+  }
+}
