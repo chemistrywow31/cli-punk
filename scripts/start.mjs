@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import net from 'node:net';
 
 const rootDir = process.env.ROOT_DIR;
-const mode = process.env.MODE;
 const port = Number(process.env.PORT);
 const frontendPort = Number(process.env.FRONTEND_PORT);
 const serverUrl = process.env.SERVER_URL;
@@ -20,32 +19,16 @@ await main().catch(async (error) => {
 
 async function main() {
   await assertPortFree(port, 'backend');
-  if (mode === 'web') await assertPortFree(frontendPort, 'frontend');
-  if (mode === 'web') enableInterruptKeys();
+  await assertPortFree(frontendPort, 'frontend');
+  enableInterruptKeys();
 
   const backend = spawnManaged('backend', process.execPath, [`${rootDir}/backend/server.js`], {
-    stdio: mode === 'web' ? ['ignore', 'inherit', 'inherit'] : 'inherit',
+    stdio: ['ignore', 'inherit', 'inherit'],
     env: { ...process.env, PORT: String(port) },
   });
 
   await waitForUrl(`${serverUrl}/health`, backend, 10_000, 'backend');
   console.log(`Backend ready: ${serverUrl}`);
-
-  if (mode === 'tui') {
-    console.log('');
-    console.log('Starting CLI/TUI in the foreground.');
-    console.log('Exit: Ctrl+` then q, or Ctrl+C');
-    console.log('');
-    const tui = spawnManaged('tui', process.execPath, [
-      `${rootDir}/cli/src/index.js`,
-      '--server',
-      serverUrl,
-      'tui',
-    ]);
-    const code = await waitForExit(tui);
-    await shutdown(code ?? 0);
-    return;
-  }
 
   const frontend = spawnManaged('frontend', process.execPath, [
     `${rootDir}/node_modules/vite/bin/vite.js`,

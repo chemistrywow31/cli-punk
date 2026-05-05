@@ -15,7 +15,6 @@ import {
   rememberFolder,
 } from './config.js';
 import { ProtocolClient } from './wsClient.js';
-import { runTui } from './tui/app.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
@@ -25,16 +24,9 @@ const program = new Command();
 
 program
   .name('claude-punk')
-  .description('Terminal-first Claude Punk CLI/TUI')
+  .description('Claude Punk backend utility CLI')
   .option('--server <url>', 'backend server URL')
   .option('--token <token>', 'bearer token for auth-enabled backends');
-
-program
-  .command('tui')
-  .description('open the full-screen TUI')
-  .action(async () => {
-    await runTui(program.opts());
-  });
 
 program
   .command('login')
@@ -223,8 +215,8 @@ token
     console.log(`Revoked ${tokenId}`);
   });
 
-program.action(async () => {
-  await runTui(program.opts());
+program.action(() => {
+  program.help();
 });
 
 try {

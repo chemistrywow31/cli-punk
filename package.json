@@ -14,8 +14,6 @@
     "frontend:dev": "npm --workspace frontend run dev",
     "frontend:build": "npm --workspace frontend run build",
     "cli": "npm --workspace cli start",
-    "tui": "npm --workspace cli start",
-    "dev:tui": "./start.sh --tui",
     "start:all": "./start.sh",
     "dev": "./start.sh",
     "start": "./start.sh",

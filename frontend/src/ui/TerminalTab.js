@@ -1,6 +1,6 @@
 /**
  * Terminal tab — real terminal emulator using xterm.js.
- * Receives raw PTY data and renders it properly, including TUI apps like Claude CLI.
+ * Receives raw PTY data and renders it properly, including interactive terminal apps like Claude CLI.
  * Keyboard input is sent directly to the PTY as raw keystrokes.
  *
  * Instances are cached per session so the terminal survives dialog close/reopen.
