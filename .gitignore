@@ -10,3 +10,14 @@ npm-debug.log*
 .env.*
 !.env.example
 .cli-punk-auth/
+
+# Local-only redevelopment notes, agent runtime config, and reference material.
+/AGENTS.md
+/CLI_REDEVELOPMENT_FUNCTIONAL_SPEC.md
+/.agents/
+/.codex/
+/.worklog/
+/_reference/
+/agents/
+/docs/
+/frontend/public/assets/ART_PROMPTS.md

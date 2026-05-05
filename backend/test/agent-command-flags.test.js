@@ -9,15 +9,9 @@ const OLD_CODEX_FLAG = ['--full', '-auto'].join('');
 
 test('agent auto-run commands use current CLI automation flags', async () => {
   const serverSource = await fs.readFile(path.join(REPO_ROOT, 'backend/server.js'), 'utf8');
-  const specSource = await fs.readFile(path.join(REPO_ROOT, 'CLI_REDEVELOPMENT_FUNCTIONAL_SPEC.md'), 'utf8');
 
   assert.equal(serverSource.includes("claude: `${resolveCommand('claude')} --enable-auto-mode`"), true);
   assert.equal(serverSource.includes("codex: `${resolveCommand('codex')} --yolo`"), true);
   assert.equal(serverSource.includes(OLD_CLAUDE_FLAG), false);
   assert.equal(serverSource.includes(OLD_CODEX_FLAG), false);
-
-  assert.match(specSource, /Claude: `claude --enable-auto-mode`/);
-  assert.match(specSource, /Codex: `codex --yolo`/);
-  assert.equal(specSource.includes(OLD_CLAUDE_FLAG), false);
-  assert.equal(specSource.includes(OLD_CODEX_FLAG), false);
 });
