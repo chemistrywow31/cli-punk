@@ -12,6 +12,13 @@ import * as monaco from 'monaco-editor';
 import { marked } from 'marked';
 import wsService from '../services/websocket.js';
 import { downloadBase64File } from './downloadHelper.js';
+import {
+  imageMimeForPath,
+  isExternalMarkdownHref,
+  isSafeExternalMarkdownHref,
+  resolveMarkdownAssetPath,
+  resolveMarkdownLinkPath,
+} from './markdownPreviewAssets.js';
 
 // Monaco worker setup via Vite ESM
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
@@ -106,6 +113,7 @@ const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp']);
 const PREVIEW_EXTS = new Set(['md', 'markdown', 'html', 'htm', 'svg']);
 const ZOOM_STORAGE_KEY = 'claude-punk-file-zoom';
 const BASE_EDITOR_FONT_SIZE = 13;
+const TRANSPARENT_PIXEL_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 /** Cyberpunk CSS injected into markdown preview and HTML iframe */
 const PREVIEW_CSS = `
@@ -203,6 +211,8 @@ export default class FileEditor {
     this.unsubContent = null;
     this.unsubSaved = null;
     this.unsubDownloadReady = null;
+    this.previewAssetRequests = new Map();
+    this.previewRenderId = 0;
     this.zoom = readStoredZoom();
   }
 
@@ -281,6 +291,7 @@ export default class FileEditor {
     // Listen for file content responses
     this.unsubContent = wsService.on('file.content', (payload) => {
       if (payload.sessionId !== this.sessionId) return;
+      if (this._handleMarkdownAssetContent(payload)) return;
       if (payload.filePath !== this.currentFile) return;
       this._handleContent(payload);
     });
@@ -300,6 +311,8 @@ export default class FileEditor {
   }
 
   openFile(filePath) {
+    this.previewRenderId += 1;
+    this.previewAssetRequests.clear();
     this.currentFile = filePath;
     this.currentContent = null;
     this.readOnly = true;
@@ -358,10 +371,7 @@ export default class FileEditor {
     const ext = payload.filePath.split('.').pop().toLowerCase();
 
     if (payload.fileType === 'image') {
-      const mime = ext === 'gif' ? 'image/gif'
-        : ext === 'webp' ? 'image/webp'
-        : ext === 'png' ? 'image/png'
-        : 'image/jpeg';
+      const mime = imageMimeForPath(payload.filePath);
       this.previewContainer.innerHTML = `<img src="data:${mime};base64,${payload.content}" class="fe-image" style="width:${this.zoom * 100}%;" />`;
       return;
     }
@@ -416,6 +426,9 @@ export default class FileEditor {
   }
 
   _renderMarkdown(content) {
+    const renderId = ++this.previewRenderId;
+    this.previewAssetRequests.clear();
+
     const html = marked.parse(content);
     const iframe = document.createElement('iframe');
     iframe.className = 'fe-preview-iframe';
@@ -426,6 +439,77 @@ export default class FileEditor {
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><style>${this._previewCss()}</style></head><body>${html}</body></html>`);
     doc.close();
+
+    this._loadMarkdownPreviewAssets(doc, renderId);
+    this._bindMarkdownPreviewLinks(doc);
+  }
+
+  _loadMarkdownPreviewAssets(doc, renderId) {
+    for (const image of doc.querySelectorAll('img[src]')) {
+      const rawSrc = image.getAttribute('src');
+      const assetPath = resolveMarkdownAssetPath(this.currentFile, rawSrc);
+      if (!assetPath) continue;
+
+      image.dataset.workspaceSrc = assetPath;
+      image.src = TRANSPARENT_PIXEL_SRC;
+
+      const existing = this.previewAssetRequests.get(assetPath);
+      if (existing) {
+        existing.images.push(image);
+        continue;
+      }
+
+      this.previewAssetRequests.set(assetPath, { renderId, images: [image] });
+      wsService.readFile(this.sessionId, assetPath);
+    }
+  }
+
+  _handleMarkdownAssetContent(payload) {
+    const request = this.previewAssetRequests.get(payload.filePath);
+    if (!request) return false;
+    this.previewAssetRequests.delete(payload.filePath);
+
+    if (request.renderId !== this.previewRenderId || payload.fileType !== 'image') return true;
+
+    const src = `data:${imageMimeForPath(payload.filePath)};base64,${payload.content}`;
+    for (const image of request.images) {
+      if (image.isConnected) image.src = src;
+    }
+    return true;
+  }
+
+  _bindMarkdownPreviewLinks(doc) {
+    for (const link of doc.querySelectorAll('a[href]')) {
+      const rawHref = link.getAttribute('href');
+      const href = String(rawHref || '').trim();
+      if (!href) continue;
+
+      if (isSafeExternalMarkdownHref(href)) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+
+      link.addEventListener('click', (event) => {
+        if (href.startsWith('#')) return;
+
+        if (isExternalMarkdownHref(href)) {
+          event.preventDefault();
+          if (isSafeExternalMarkdownHref(href)) {
+            window.open(href, '_blank', 'noopener,noreferrer');
+          }
+          return;
+        }
+
+        const targetPath = resolveMarkdownLinkPath(this.currentFile, href);
+        if (!targetPath) {
+          event.preventDefault();
+          return;
+        }
+
+        event.preventDefault();
+        this.openFile(targetPath);
+      });
+    }
   }
 
   _renderHTML(content) {
