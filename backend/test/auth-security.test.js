@@ -59,6 +59,26 @@ test('REST auth protects /api and supports token lifecycle', async () => {
       expectedStatus: 401,
     });
     assert.deepEqual(revoked, { error: 'AUTH_INVALID' });
+
+    const bearerWithStaleCookie = await requestJson(fixture.url, '/api/auth/whoami', {
+      token: fixture.adminToken,
+      cookie: 'claude_punk_session=stale',
+      origin: 'https://cp.fans-pilot.com',
+    });
+    assert.equal(bearerWithStaleCookie.role, 'admin');
+  } finally {
+    await fixture.stop();
+  }
+});
+
+test('/cp prefixed REST and WebSocket routes are accepted', async () => {
+  const fixture = await startBackend();
+  try {
+    const identity = await requestJson(fixture.url, '/cp/api/auth/whoami', { token: fixture.adminToken });
+    assert.equal(identity.role, 'admin');
+
+    const ws = await openWs(`${fixture.cpWsUrl}?token=${encodeURIComponent(fixture.adminToken)}`);
+    ws.close();
   } finally {
     await fixture.stop();
   }
@@ -303,6 +323,7 @@ async function startBackend(options = {}) {
     port,
     url: `http://127.0.0.1:${port}`,
     wsUrl: `ws://127.0.0.1:${port}/ws`,
+    cpWsUrl: `ws://127.0.0.1:${port}/cp/ws`,
     adminToken: options.adminToken || adminToken,
     child,
     async stop() {
@@ -336,6 +357,7 @@ async function requestJson(baseUrl, route, options = {}) {
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   if (options.cookie) headers.cookie = options.cookie;
+  if (options.origin) headers.origin = options.origin;
   const response = await fetch(new URL(route, `${baseUrl}/`), {
     method: options.method || 'GET',
     headers,

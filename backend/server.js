@@ -234,6 +234,8 @@ const ROLE_RANK = Object.freeze({ viewer: 1, operator: 2, admin: 3 });
 const VALID_ROLES = new Set(Object.keys(ROLE_RANK));
 const TOKEN_HASH_PARAMS = Object.freeze({ N: 16384, r: 8, p: 1, keyLength: 64, maxmem: 64 * 1024 * 1024 });
 const FILE_TRANSFER_MAX_BYTES = 5 * 1024 * 1024;
+const ARCHIVE_TRANSFER_MAX_BYTES = 50 * 1024 * 1024;
+const ARCHIVE_MAX_FILES = 5000;
 const BROWSER_SESSION_COOKIE = 'claude_punk_session';
 const BROWSER_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const BROWSER_SESSION_MAX_AGE_SECONDS = Math.floor(BROWSER_SESSION_MAX_AGE_MS / 1000);
@@ -754,7 +756,7 @@ function isBrowserSessionRequest(req) {
 }
 
 function rejectDisallowedBrowserOrigin(req, res, next) {
-  if (req.headers.origin && isBrowserSessionRequest(req) && !isAllowedRequestOrigin(req)) {
+  if (req.headers.origin && isBrowserSessionRequest(req) && !parseBearerToken(req) && !isAllowedRequestOrigin(req)) {
     return res.status(403).json({ error: 'AUTH_FORBIDDEN' });
   }
   next();
@@ -2118,6 +2120,159 @@ async function buildFileTree(dir, currentDepth = 0, baseDir = null, rootReal = n
   return nodes;
 }
 
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { dosDate, dosTime };
+}
+
+function zipSafeName(name) {
+  const safe = String(name || 'download')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/^\.+$/, 'download');
+  return safe || 'download';
+}
+
+function makeZip(entries) {
+  const localParts = [];
+  const centralParts = [];
+  const records = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBuffer = Buffer.from(entry.name, 'utf8');
+    const data = entry.data || Buffer.alloc(0);
+    const { dosDate, dosTime } = zipDateTime(entry.mtime);
+    const crc = crc32(data);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(nameBuffer.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+
+    localParts.push(localHeader, nameBuffer, data);
+    records.push({ entry, nameBuffer, data, crc, dosDate, dosTime, offset });
+    offset += localHeader.length + nameBuffer.length + data.length;
+  }
+
+  const centralOffset = offset;
+  for (const record of records) {
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(record.dosTime, 12);
+    centralHeader.writeUInt16LE(record.dosDate, 14);
+    centralHeader.writeUInt32LE(record.crc, 16);
+    centralHeader.writeUInt32LE(record.data.length, 20);
+    centralHeader.writeUInt32LE(record.data.length, 24);
+    centralHeader.writeUInt16LE(record.nameBuffer.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(record.entry.isDir ? 0x10 : 0, 38);
+    centralHeader.writeUInt32LE(record.offset, 42);
+    centralParts.push(centralHeader, record.nameBuffer);
+    offset += centralHeader.length + record.nameBuffer.length;
+  }
+
+  const centralSize = offset - centralOffset;
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(records.length, 8);
+  end.writeUInt16LE(records.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(centralOffset, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, end]);
+}
+
+async function buildDirectoryZip(rootDir, dirPath, displayName) {
+  const rootReal = await fs.promises.realpath(rootDir);
+  const parent = path.dirname(dirPath);
+  const rootName = zipSafeName(displayName || path.basename(dirPath) || 'folder');
+  const entries = [];
+  let totalBytes = 0;
+  let fileCount = 0;
+
+  async function walk(currentPath) {
+    const realPath = await fs.promises.realpath(currentPath);
+    assertInsidePath(rootReal, realPath);
+    const stat = await fs.promises.stat(currentPath);
+    let zipName = path.relative(parent, currentPath).split(path.sep).join('/');
+
+    if (stat.isDirectory()) {
+      if (zipName && !zipName.endsWith('/')) zipName += '/';
+      entries.push({ name: zipName || `${rootName}/`, data: Buffer.alloc(0), mtime: stat.mtime, isDir: true });
+      const children = (await fs.promises.readdir(currentPath, { withFileTypes: true }))
+        .filter((entry) => !shouldExclude(entry.name))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      for (const child of children) {
+        await walk(path.join(currentPath, child.name));
+      }
+      return;
+    }
+
+    if (!stat.isFile()) return;
+    fileCount += 1;
+    if (fileCount > ARCHIVE_MAX_FILES) {
+      throw new Error(`Folder has too many files (max ${ARCHIVE_MAX_FILES})`);
+    }
+    totalBytes += stat.size;
+    if (totalBytes > ARCHIVE_TRANSFER_MAX_BYTES) {
+      throw new Error('Folder too large to download (max 50MB uncompressed)');
+    }
+    entries.push({
+      name: zipName || rootName,
+      data: await fs.promises.readFile(currentPath),
+      mtime: stat.mtime,
+      isDir: false,
+    });
+  }
+
+  await walk(dirPath);
+  return {
+    buffer: makeZip(entries),
+    fileName: `${rootName}.zip`,
+    fileCount,
+    uncompressedSize: totalBytes,
+  };
+}
+
 // ─── Section 7: readClaudeConfig ─────────────────────────────────────────────
 
 async function readClaudeConfig(workDir) {
@@ -2215,7 +2370,7 @@ function createWSS(server, sessionManager, fileWatcher, tokenStore, auditLogger)
       return;
     }
 
-    if (pathname !== '/ws') {
+    if (pathname !== '/ws' && pathname !== '/cp/ws') {
       socket.destroy();
       return;
     }
@@ -2589,6 +2744,35 @@ function createWSS(server, sessionManager, fileWatcher, tokenStore, auditLogger)
             try {
               const { realPath: dlAbsPath } = await resolveExistingInside(dlSession.workDir, filePath);
               const stat = await fs.promises.stat(dlAbsPath);
+              if (stat.isDirectory()) {
+                const archive = await buildDirectoryZip(dlSession.workDir, dlAbsPath, path.basename(filePath));
+                if (archive.buffer.length > ARCHIVE_TRANSFER_MAX_BYTES) {
+                  sendToClient(ws, 'error', { message: 'Archive too large to download (max 50MB)', code: 'INVALID_MESSAGE' });
+                  return;
+                }
+                sendToClient(ws, 'file.downloadReady', {
+                  sessionId,
+                  filePath,
+                  downloadName: archive.fileName,
+                  content: archive.buffer.toString('base64'),
+                  size: archive.buffer.length,
+                  archive: true,
+                });
+                await auditLogger.write({
+                  operation: 'file.download',
+                  actor: auditActor(ws.auth),
+                  target: {
+                    sessionId,
+                    path: filePath,
+                    size: archive.buffer.length,
+                    uncompressedSize: archive.uncompressedSize,
+                    fileCount: archive.fileCount,
+                    archive: true,
+                  },
+                  outcome: 'success',
+                });
+                break;
+              }
               if (stat.size > FILE_TRANSFER_MAX_BYTES) {
                 sendToClient(ws, 'error', { message: 'File too large (max 5MB)', code: 'INVALID_MESSAGE' });
                 return;
@@ -2938,7 +3122,9 @@ activityWatcher.on('activity', (payload) => {
   broadcast('claude.activity', payload);
 });
 
-app.use('/api', createRESTRouter(sessionManager, fileWatcher, broadcast, tokenStore, auditLogger));
+const restRouter = createRESTRouter(sessionManager, fileWatcher, broadcast, tokenStore, auditLogger);
+app.use('/api', restRouter);
+app.use('/cp/api', restRouter);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -2946,6 +3132,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 httpServer.listen(CONFIG.port, CONFIG.host, () => {
   console.log(`[Claude Punk] Backend running on http://${CONFIG.host}:${CONFIG.port}`);
   console.log(`[Claude Punk] WebSocket at ws://${CONFIG.host}:${CONFIG.port}/ws`);
+  console.log(`[Claude Punk] WebSocket with /cp prefix at ws://${CONFIG.host}:${CONFIG.port}/cp/ws`);
   console.log(`[Claude Punk] Platform: ${process.platform} (${IS_WINDOWS ? 'Windows' : 'Unix'})`);
   console.log(`[Claude Punk] Shell: ${CONFIG.shell} ${JSON.stringify(CONFIG.shellArgs)}`);
   console.log(`[Claude Punk] Agent commands: ${JSON.stringify(CONFIG.agentCommands)}`);

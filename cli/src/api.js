@@ -14,7 +14,7 @@ export class ApiError extends Error {
 
 export async function request(method, route, { serverUrl, token, body, signal } = {}) {
   const baseUrl = serverUrl || resolveServerUrl();
-  const url = new URL(route, `${baseUrl}/`);
+  const url = new URL(route.replace(/^\//, ''), `${baseUrl.replace(/\/$/, '')}/`);
   const headers = { accept: 'application/json' };
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (token) headers.authorization = `Bearer ${token}`;

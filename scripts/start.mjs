@@ -43,7 +43,6 @@ async function main() {
     env: {
       ...process.env,
       BACKEND_PORT: String(port),
-      VITE_BACKEND_WS: `ws://127.0.0.1:${port}/ws`,
     },
   });
 

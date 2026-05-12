@@ -4,11 +4,13 @@
  * Uses HTML5 Audio (not Phaser audio) so it works independently of the game scene.
  */
 
+import { assetPath } from '../utils/assetPath.js';
+
 const TRACKS = [
-  '/assets/audio/bgm-bar-ambient-1.mp3',
-  '/assets/audio/bgm-bar-ambient-2.mp3',
-  '/assets/audio/bgm-bar-ambient-3.mp3',
-  '/assets/audio/bgm-bar-ambient-0.mp3',
+  assetPath('/assets/audio/bgm-bar-ambient-1.mp3'),
+  assetPath('/assets/audio/bgm-bar-ambient-2.mp3'),
+  assetPath('/assets/audio/bgm-bar-ambient-3.mp3'),
+  assetPath('/assets/audio/bgm-bar-ambient-0.mp3'),
 ];
 
 class AudioManager {

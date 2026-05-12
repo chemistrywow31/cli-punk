@@ -44,9 +44,9 @@ function getMimeType(filePath) {
  * @param {string} filePath - full or relative path (used to extract filename)
  * @param {string} base64Content - base64-encoded file data
  */
-export function downloadBase64File(filePath, base64Content) {
-  const fileName = filePath.split('/').pop();
-  const mime = getMimeType(filePath);
+export function downloadBase64File(filePath, base64Content, downloadName = null) {
+  const fileName = downloadName || filePath.split(/[\\/]/).pop();
+  const mime = getMimeType(fileName);
 
   // Decode base64 to Uint8Array
   const binaryStr = atob(base64Content);

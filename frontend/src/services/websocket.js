@@ -13,6 +13,16 @@ export function isBackendUnavailableError(error) {
   return error?.code === 'BACKEND_UNAVAILABLE' || error?.status === 0;
 }
 
+export function backendPathPrefix(pathname = window.location.pathname) {
+  return pathname === '/cp' || pathname.startsWith('/cp/') ? '/cp' : '';
+}
+
+export function defaultWebSocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = new URL(`${backendPathPrefix()}/ws`, `${protocol}//${window.location.host}`);
+  return url.toString();
+}
+
 class WebSocketService {
   constructor() {
     this.ws = null;
@@ -22,6 +32,7 @@ class WebSocketService {
     this.reconnectDelay = 1000;
     this.maxReconnectDelay = 30000;
     this.tokenStorageKey = 'claude-punk-token';
+    this.memoryToken = '';
     this.reconnectPaused = false;
     this.connectionSerial = 0;
     this.lastWsUrl = null;
@@ -55,7 +66,7 @@ class WebSocketService {
       this.ws = null;
     }
 
-    const wsUrl = this.normalizeWsUrl(url || import.meta.env.VITE_BACKEND_WS || `ws://${window.location.host}/ws`);
+    const wsUrl = this.normalizeWsUrl(url || import.meta.env.VITE_BACKEND_WS || defaultWebSocketUrl());
     this.lastWsUrl = wsUrl;
     this.prepareSocketUrl(wsUrl, token)
       .then(({ url: socketUrl, authMode }) => {
@@ -182,25 +193,33 @@ class WebSocketService {
   }
 
   getToken() {
-    return localStorage.getItem(this.tokenStorageKey) || import.meta.env.VITE_CLAUDE_PUNK_TOKEN || '';
+    return this.memoryToken;
   }
 
   setToken(token) {
-    localStorage.setItem(this.tokenStorageKey, token);
+    this.memoryToken = token;
     this.reconnectDelay = 1000;
     this.reconnectPaused = false;
   }
 
   clearToken() {
     const token = this.getToken();
-    this.clearBrowserSession(token);
-    localStorage.removeItem(this.tokenStorageKey);
+    if (token) this.clearBrowserSession(token);
+    this.memoryToken = '';
+    try {
+      localStorage.removeItem(this.tokenStorageKey);
+    } catch {
+      // Ignore non-browser tests and unavailable storage.
+    }
     this.reconnectPaused = true;
     this.disconnect();
   }
 
   normalizeWsUrl(rawUrl) {
-    return new URL(rawUrl, window.location.href).toString();
+    const url = new URL(rawUrl, window.location.href);
+    if (url.protocol === 'http:') url.protocol = 'ws:';
+    if (url.protocol === 'https:') url.protocol = 'wss:';
+    return url.toString();
   }
 
   async prepareSocketUrl(wsUrl, token) {
@@ -242,7 +261,8 @@ class WebSocketService {
   }
 
   clearBrowserSession(token) {
-    const wsUrl = this.lastWsUrl || this.normalizeWsUrl(import.meta.env.VITE_BACKEND_WS || `ws://${window.location.host}/ws`);
+    if (typeof window === 'undefined') return;
+    const wsUrl = this.lastWsUrl || this.normalizeWsUrl(import.meta.env.VITE_BACKEND_WS || defaultWebSocketUrl());
     const headers = { accept: 'application/json' };
     if (token) headers.authorization = `Bearer ${token}`;
     fetch(this.browserSessionUrl(wsUrl), {
@@ -255,7 +275,8 @@ class WebSocketService {
   browserSessionUrl(wsUrl) {
     const url = new URL(wsUrl, window.location.href);
     url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
-    url.pathname = '/api/auth/browser-session';
+    const prefix = url.pathname === '/cp/ws' || url.pathname.startsWith('/cp/') ? '/cp' : '';
+    url.pathname = `${prefix}/api/auth/browser-session`;
     url.search = '';
     url.hash = '';
     return url.toString();

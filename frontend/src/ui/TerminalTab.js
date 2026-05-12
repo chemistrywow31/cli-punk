@@ -68,6 +68,8 @@ export default class TerminalTab {
     this.fitAddon = new FitAddon();
     this.term.loadAddon(this.fitAddon);
 
+    this.term.attachCustomKeyEventHandler((event) => this._handleTerminalKey(event));
+
     // Subscribe to PTY output (persists across attach/detach cycles)
     this.unsubOutput = wsService.on('terminal.output', (payload) => {
       if (payload.sessionId !== this.sessionId) return;
@@ -92,6 +94,40 @@ export default class TerminalTab {
     });
 
     window.addEventListener('terminal-style-changed', this._onTerminalStyleChanged);
+  }
+
+  _handleTerminalKey(event) {
+    if (event.type !== 'keydown') return true;
+    if (!event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== 'c') return true;
+    if (!this.term?.hasSelection()) return true;
+
+    const selection = this.term.getSelection();
+    if (selection) {
+      this._copyText(selection);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return false;
+  }
+
+  async _copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        // ignore
+      }
+      textarea.remove();
+    }
   }
 
   /**

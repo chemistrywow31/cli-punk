@@ -336,21 +336,26 @@ body[data-theme="bauhaus"] {
   gap: 6px;
 }
 
+.wb-sessions { grid-column: 1; }
+.wb-grid-resizer[data-resize-pane="sessions"] { grid-column: 2; }
+.wb-terminal { grid-column: 3; }
+.wb-grid-resizer[data-resize-pane="detail"] { grid-column: 4; }
+.wb-detail { grid-column: 5; }
+
 .wb-pane-restore {
   position: absolute;
-  top: 10px;
-  left: 50%;
+  right: 12px;
+  bottom: 12px;
   z-index: 20;
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(760px, calc(100vw - 40px));
+  max-width: min(720px, calc(100% - 24px));
   padding: 8px 10px;
   color: var(--color-text);
   background: var(--color-panel);
   border: 2px solid var(--color-text);
   box-shadow: 8px 8px 0 rgba(0, 87, 184, 0.18);
-  transform: translateX(-50%);
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -1280,11 +1285,60 @@ body[data-theme="bauhaus"] .ts-bg-item {
   }
 
   .wb-grid {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 42fr) minmax(260px, 58fr);
+  }
+
+  .wb-grid-resizer {
+    display: none;
+  }
+
+  .wb-sessions {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .wb-terminal {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .wb-detail {
     grid-column: 1 / -1;
-    min-height: 280px;
+    grid-row: 2;
+    min-height: 0;
+  }
+
+  .wb-grid.pane-collapsed-sessions,
+  .wb-grid.pane-collapsed-terminal,
+  .wb-grid.pane-collapsed-detail,
+  .wb-grid.pane-collapsed-sessions.pane-collapsed-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wb-grid.pane-collapsed-sessions .wb-terminal,
+  .wb-grid.pane-collapsed-detail .wb-terminal {
+    grid-column: 1 / -1;
+  }
+
+  .wb-grid.pane-collapsed-terminal .wb-sessions {
+    grid-column: 1 / -1;
+  }
+
+  .wb-grid.pane-collapsed-terminal .wb-detail {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .wb-grid.pane-collapsed-detail {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .wb-grid.pane-collapsed-detail .wb-terminal {
+    grid-row: 1;
+  }
+
+  .wb-grid.pane-collapsed-sessions .wb-detail {
+    grid-column: 1 / -1;
   }
 }

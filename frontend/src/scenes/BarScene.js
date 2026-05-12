@@ -27,6 +27,7 @@ import jukeboxAudio from '../services/jukeboxAudio.js';
 import retroTvPlayer from '../services/retroTvPlayer.js';
 import costTracker from '../services/costTracker.js';
 import contextTracker from '../services/contextTracker.js';
+import { assetPath } from '../utils/assetPath.js';
 
 export default class BarScene extends Phaser.Scene {
   constructor() {
@@ -51,25 +52,29 @@ export default class BarScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('bar-bg', '/assets/backgrounds/bar-interior.png');
-    this.load.spritesheet('door-sheet', '/assets/sprites/objects/door.png', {
+    this.load.image('bar-bg', assetPath('/assets/backgrounds/bar-interior.png'));
+    this.load.spritesheet('door-sheet', assetPath('/assets/sprites/objects/door.png'), {
       frameWidth: 140,
       frameHeight: 240,
     });
-    this.load.spritesheet('jukebox', '/assets/sprites/objects/jukebox.png', {
+    this.load.spritesheet('jukebox', assetPath('/assets/sprites/objects/jukebox.png'), {
       frameWidth: 125,
       frameHeight: 192,
     });
     for (let i = 0; i < 8; i++) {
-      this.load.atlas(`character-${i}`, `/assets/sprites/characters/character-${i}.png`, `/assets/sprites/characters/character-${i}.json`);
+      this.load.atlas(
+        `character-${i}`,
+        assetPath(`/assets/sprites/characters/character-${i}.png`),
+        assetPath(`/assets/sprites/characters/character-${i}.json`)
+      );
     }
     // Hidden characters
-    this.load.atlas('character-8', '/assets/sprites/characters/character-8-silverhand.png', '/assets/sprites/characters/character-8-silverhand.json');
-    this.load.atlas('character-9', '/assets/sprites/characters/character-9-mj.png', '/assets/sprites/characters/character-9-mj.json');
-    this.load.atlas('bartender', '/assets/sprites/characters/bartender.png', '/assets/sprites/characters/bartender.json');
-    this.load.atlas('drinks', '/assets/sprites/objects/drinks.png', '/assets/sprites/objects/drinks.json');
-    this.load.image('neon-sign', '/assets/sprites/ui/neon-sign-main.png');
-    this.load.spritesheet('retro-tv-sheet', '/assets/sprites/objects/retro-tv.png', {
+    this.load.atlas('character-8', assetPath('/assets/sprites/characters/character-8-silverhand.png'), assetPath('/assets/sprites/characters/character-8-silverhand.json'));
+    this.load.atlas('character-9', assetPath('/assets/sprites/characters/character-9-mj.png'), assetPath('/assets/sprites/characters/character-9-mj.json'));
+    this.load.atlas('bartender', assetPath('/assets/sprites/characters/bartender.png'), assetPath('/assets/sprites/characters/bartender.json'));
+    this.load.atlas('drinks', assetPath('/assets/sprites/objects/drinks.png'), assetPath('/assets/sprites/objects/drinks.json'));
+    this.load.image('neon-sign', assetPath('/assets/sprites/ui/neon-sign-main.png'));
+    this.load.spritesheet('retro-tv-sheet', assetPath('/assets/sprites/objects/retro-tv.png'), {
       frameWidth: 320,
       frameHeight: 180,
     });

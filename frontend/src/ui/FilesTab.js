@@ -164,7 +164,7 @@ export default class FilesTab {
     // Download ready
     this.unsubDownloadReady = wsService.on('file.downloadReady', (payload) => {
       if (payload.sessionId !== this.sessionId) return;
-      downloadBase64File(payload.filePath, payload.content);
+      downloadBase64File(payload.filePath, payload.content, payload.downloadName);
     });
 
     // Request tree on render
@@ -244,18 +244,15 @@ export default class FilesTab {
 
       row.appendChild(label);
 
-      // Download button (files only, visible on hover)
-      if (!node.isDir) {
-        const dlBtn = document.createElement('button');
-        dlBtn.className = 'file-download-btn';
-        dlBtn.title = `Download ${node.name}`;
-        dlBtn.textContent = '\u2193';
-        dlBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          wsService.downloadFile(this.sessionId, node.path);
-        });
-        row.appendChild(dlBtn);
-      }
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'file-download-btn';
+      dlBtn.title = node.isDir ? `Download ${node.name} as .zip` : `Download ${node.name}`;
+      dlBtn.textContent = '\u2193';
+      dlBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        wsService.downloadFile(this.sessionId, node.path);
+      });
+      row.appendChild(dlBtn);
 
       row.appendChild(delBtn);
       li.appendChild(row);

@@ -32,6 +32,30 @@ import { formatSessionHotkey, nextSessionHotkey, sessionHotkeyFromEvent } from '
 initFontOffset();
 initStyleSettings();
 
+const PANE_RESTORE_HOTKEYS = {
+  sessions: 'Ctrl+Shift+1',
+  terminal: 'Ctrl+Shift+2',
+  detail: 'Ctrl+Shift+3',
+};
+
+const PANE_RESTORE_CODES = {
+  Digit1: 'sessions',
+  Digit2: 'terminal',
+  Digit3: 'detail',
+};
+
+const PANE_COLLAPSE_HOTKEYS = {
+  sessions: 'Ctrl+Alt+1',
+  terminal: 'Ctrl+Alt+2',
+  detail: 'Ctrl+Alt+3',
+};
+
+const PANE_COLLAPSE_CODES = {
+  Digit1: 'sessions',
+  Digit2: 'terminal',
+  Digit3: 'detail',
+};
+
 class WorkbenchApp {
   constructor() {
     this.sessions = new Map();
@@ -87,7 +111,7 @@ class WorkbenchApp {
           <form class="wb-auth-form">
             <div>
               <h2>Backend Auth</h2>
-              <p>Paste a CLI Punk bearer token. The page stores it locally, exchanges it for a browser session cookie, and keeps tokens out of URLs.</p>
+              <p>Paste a CLI Punk bearer token. The page keeps it in memory, exchanges it for a browser session cookie, and keeps tokens out of URLs.</p>
             </div>
             <label>
               <span>Token / .env Snippet</span>
@@ -109,7 +133,7 @@ class WorkbenchApp {
               <h2>Sessions</h2>
               <div class="pane-tools">
                 <button data-action="new"><span>+</span><kbd>N</kbd></button>
-                <button data-pane-toggle="sessions" title="Collapse sessions pane">-</button>
+                <button data-pane-toggle="sessions" title="Collapse sessions pane (${PANE_COLLAPSE_HOTKEYS.sessions})">-</button>
               </div>
             </div>
             <div class="wb-session-list"></div>
@@ -120,7 +144,7 @@ class WorkbenchApp {
             <div class="pane-head">
               <h2>Terminal + File Warp</h2>
               <div class="pane-head-right">
-                <button data-pane-toggle="terminal" title="Collapse terminal pane">-</button>
+                <button data-pane-toggle="terminal" title="Collapse terminal pane (${PANE_COLLAPSE_HOTKEYS.terminal})">-</button>
               </div>
             </div>
             <div class="wb-terminal-mount"></div>
@@ -139,7 +163,7 @@ class WorkbenchApp {
                   <button data-action="refresh"><span>Refresh</span><kbd>F5</kbd></button>
                   <button data-action="kill"><span>Kill</span><kbd>F9</kbd></button>
                 </div>
-                <button data-pane-toggle="detail" title="Collapse files pane">-</button>
+                <button data-pane-toggle="detail" title="Collapse files pane (${PANE_COLLAPSE_HOTKEYS.detail})">-</button>
               </div>
             </div>
             <div class="wb-detail-mount"></div>
@@ -152,6 +176,8 @@ class WorkbenchApp {
             <kbd>N</kbd> New
             <kbd>F6</kbd> Pane
             <kbd>Shift+F6</kbd> Restore panes
+            <kbd>Ctrl+Shift+1-3</kbd> Restore one
+            <kbd>Ctrl+Alt+1-3</kbd> Hide one
             <kbd>F10</kbd> Style
             <kbd>R</kbd> Resume
             <kbd>Alt+←/→</kbd> Prev/Next
@@ -300,7 +326,7 @@ class WorkbenchApp {
 
       if (event.key === 'F1') {
         event.preventDefault();
-        this.notice('Esc closes overlays / Alt+1-9/0 switch sessions / F6 switch panes / Shift+F6 restore panes');
+        this.notice('Esc closes overlays / Alt+1-9/0 sessions / F6 panes / Ctrl+Shift+1-3 restore panes');
         return;
       }
 
@@ -341,6 +367,29 @@ class WorkbenchApp {
         if (event.shiftKey || this.visiblePaneCount() === 0) this.restoreAllPanes();
         else this.cycleFocusedPane();
         return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+        const pane = PANE_RESTORE_CODES[event.code];
+        if (pane) {
+          event.preventDefault();
+          this.restorePane(pane);
+          return;
+        }
+        if (event.key.toLowerCase() === 'w') {
+          event.preventDefault();
+          this.restoreAllPanes();
+          return;
+        }
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.altKey) {
+        const pane = PANE_COLLAPSE_CODES[event.code];
+        if (pane) {
+          event.preventDefault();
+          this.collapsePane(pane);
+          return;
+        }
       }
 
       if (this.isTerminalFocused()) return;
@@ -764,6 +813,25 @@ class WorkbenchApp {
     });
   }
 
+  collapsePane(pane) {
+    if (!['sessions', 'terminal', 'detail'].includes(pane)) return;
+    if (this.collapsedPanes.has(pane)) return;
+    const next = new Set(this.collapsedPanes);
+    next.add(pane);
+
+    if (this.visiblePaneCount(next) === 0) {
+      this.notice('keep at least one pane open; use Ctrl+Shift+W to restore all');
+      return;
+    }
+
+    this.collapsedPanes = next;
+    this.persistPaneState();
+    this.applyPaneState();
+    requestAnimationFrame(() => {
+      this.terminalInstance?.fitAddon?.fit?.();
+    });
+  }
+
   restorePane(pane) {
     if (!['sessions', 'terminal', 'detail'].includes(pane)) return;
     this.collapsedPanes.delete(pane);
@@ -811,7 +879,7 @@ class WorkbenchApp {
       <span>Hidden panes</span>
       ${hidden.map((pane) => `
         <button data-pane-restore="${pane}">
-          <span>${labels[pane]}</span><kbd>Show</kbd>
+          <span>${labels[pane]}</span><kbd>${PANE_RESTORE_HOTKEYS[pane]}</kbd>
         </button>
       `).join('')}
       <button data-pane-restore-all>
@@ -908,7 +976,7 @@ class WorkbenchApp {
       return;
     }
     wsService.setToken(token);
-    this.notice('auth token stored locally');
+    this.notice('auth token kept in memory');
     this.connectWithStoredToken();
   }
 

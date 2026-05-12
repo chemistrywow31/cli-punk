@@ -6,7 +6,7 @@ export function buildWebSocketUrl(serverUrl) {
   const url = new URL(normalizeServerUrl(serverUrl));
   if (url.protocol === 'http:') url.protocol = 'ws:';
   if (url.protocol === 'https:') url.protocol = 'wss:';
-  url.pathname = '/ws';
+  url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`;
   url.search = '';
   url.hash = '';
   return url.toString();
